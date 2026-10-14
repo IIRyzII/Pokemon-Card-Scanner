@@ -1,10 +1,12 @@
 // Sold comps ("eBay last solds") logged by editors — raw or graded.
 
 import { Hono } from 'hono';
+import { CURRENCIES } from '../../../shared/currency.ts';
 import { GRADERS, GRADE_LABELS, isGrade } from '../../../shared/grading.ts';
 import { authenticate, requireRole } from '../auth.ts';
 import { auditStmt, toSale } from '../db.ts';
 import { HttpError, nowIso, todayIso, type AppEnv } from '../env.ts';
+import { homeCurrency } from '../fx.ts';
 import { recomputeValues } from '../prices.ts';
 import { cardId as parseCardId, httpUrl, isoDate, number, oneOf, readJson, text } from '../validate.ts';
 
@@ -31,6 +33,7 @@ sales.post('/', requireRole('editor'), async (c) => {
     if (grade === 10) gradeLabel = oneOf(body.gradeLabel, GRADE_LABELS[grader] ?? [], 'Grade label', { optional: true });
   }
   const price = number(body.price, 'Price', { min: 0, max: 10_000_000 })!;
+  const currency = oneOf(body.currency ?? homeCurrency(c.env), CURRENCIES, 'Currency')!;
   const soldOn = isoDate(body.soldOn ?? todayIso(), 'Sold date')!;
   if (soldOn > todayIso()) throw new HttpError(400, "The sold date can't be in the future");
   const source = text(body.source, 'Source', { optional: true, max: 40 }) ?? 'eBay';
@@ -40,10 +43,25 @@ sales.post('/', requireRole('editor'), async (c) => {
   const id = crypto.randomUUID();
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO sales (id, card_id, grader, grade, grade_label, price, sold_on, source, url, note, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(id, cardId, grader, grade, gradeLabel, Math.round(price * 100) / 100, soldOn, source, url, note, user.id, nowIso()),
-    auditStmt(c.env, user, 'log-sale', 'card', cardId, { grader, grade, gradeLabel, price, soldOn, source }),
+      `INSERT INTO sales (id, card_id, grader, grade, grade_label, price, currency, sold_on, source, url, note, created_by,
+         created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id,
+      cardId,
+      grader,
+      grade,
+      gradeLabel,
+      Math.round(price * 100) / 100,
+      currency,
+      soldOn,
+      source,
+      url,
+      note,
+      user.id,
+      nowIso(),
+    ),
+    auditStmt(c.env, user, 'log-sale', 'card', cardId, { grader, grade, gradeLabel, price, currency, soldOn, source }),
   ]);
   await recomputeValues(c.env, cardId);
   const row = await c.env.DB.prepare('SELECT * FROM sales WHERE id = ?').bind(id).first();

@@ -2,7 +2,7 @@ import { CONDITION_LABELS, VARIANT_LABELS, gradeText, type Condition, type Varia
 import { cardNumberText } from '../../../shared/links.ts';
 import type { CollectionItem } from '../../../shared/types.ts';
 import type { CatalogCard } from '../lib/catalog.ts';
-import { money } from '../lib/format.ts';
+import { useCurrency } from '../lib/currency.tsx';
 import { href } from '../lib/router.ts';
 import { CardImage } from './CardImage.tsx';
 
@@ -15,11 +15,19 @@ export function gradeBadge(item: Pick<CollectionItem, 'grader' | 'grade' | 'grad
 }
 
 export function ItemTile({ item, artist }: { item: CollectionItem; artist?: string | null }) {
+  const { format } = useCurrency();
   const graded = item.grader !== 'RAW';
+  const from = item.valueCurrency ?? 'USD';
   return (
     <a className="tile" href={href('item', item.id)}>
       <div className="tile-img">
-        <CardImage base={item.image} name={item.name} subtitle={`${item.setName} · ${cardNumberText(item.number, item.setTotal)}`} />
+        <CardImage
+          base={item.image}
+          name={item.name}
+          subtitle={`${item.setName} · ${cardNumberText(item.number, item.setTotal)}`}
+          setId={item.setId}
+          number={item.number}
+        />
         <div className="tile-badges">
           {graded && <span className="badge grade">{gradeBadge(item)}</span>}
           {item.variant !== 'normal' && item.variant !== 'holo' && <span className="badge">{variantLabel(item.variant)}</span>}
@@ -36,8 +44,8 @@ export function ItemTile({ item, artist }: { item: CollectionItem; artist?: stri
           <div className="tile-value none">No price yet</div>
         ) : (
           <div className="tile-value">
-            {money(item.value * item.quantity)}
-            {item.quantity > 1 && <small> ({money(item.value)} ea)</small>}
+            {format(item.value * item.quantity, from)}
+            {item.quantity > 1 && <small> ({format(item.value, from)} ea)</small>}
           </div>
         )}
       </div>
@@ -49,7 +57,13 @@ export function CatalogTile({ card, owned }: { card: CatalogCard; owned?: number
   return (
     <a className={`tile ${owned ? 'owned' : ''}`} href={href('card', card.id)}>
       <div className="tile-img">
-        <CardImage base={card.image} name={card.name} subtitle={`${card.set.name} · ${cardNumberText(card.number, card.set.official)}`} />
+        <CardImage
+          base={card.image}
+          name={card.name}
+          subtitle={`${card.set.name} · ${cardNumberText(card.number, card.set.official)}`}
+          setId={card.set.id}
+          number={card.number}
+        />
         {owned ? <span className="badge owned-badge">Owned ×{owned}</span> : null}
       </div>
       <div className="tile-body">

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { hasRole } from '../../shared/types.ts';
 import { IconBrush, IconCards, IconPlus, IconShield, IconUser } from './components/Icons.tsx';
 import { CollectionProvider } from './lib/collection.tsx';
+import { CurrencyProvider } from './lib/currency.tsx';
 import { href, useRoute } from './lib/router.ts';
 import { useSession } from './lib/session.tsx';
 import { AccountPage } from './pages/AccountPage.tsx';
@@ -22,9 +23,11 @@ export function App() {
   if (status === 'signedOut' || !user) return <LoginPage />;
   if (user.role === 'pending') return <PendingPage />;
   return (
-    <CollectionProvider>
-      <Shell />
-    </CollectionProvider>
+    <CurrencyProvider>
+      <CollectionProvider>
+        <Shell />
+      </CollectionProvider>
+    </CurrencyProvider>
   );
 }
 

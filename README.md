@@ -6,6 +6,10 @@ A phone-friendly web app for tracking a Pokémon card collection:
 - **Confirm before adding**: pick the printing (normal, holo, reverse, 1st edition), raw condition or graded slab (PSA, BGS, CGC, SGC, TAG, ACE), quantity and what you paid, then review and confirm.
 - Every card shows its **image, name, set, number** and **price**. Totals for the whole collection are at the top.
 - **Raw prices** (TCGplayer + Cardmarket) refresh daily, and the app keeps its **own price history**.
+- **Your currency**: everything is shown in **GBP** by default. Anyone can switch to USD, EUR, CAD or AUD under **Account → Currency**.
+  - Prices are converted with the European Central Bank's daily rates.
+  - Logged sales and purchase prices remember the currency they were entered in.
+  - eBay links open your local eBay (ebay.co.uk for GBP).
 - **Graded prices**: log eBay sold prices (one tap opens eBay's *sold* listings for that exact card and grade). Optional PriceCharting support fills in PSA/BGS/CGC/SGC prices automatically.
 - **Artists**: sort your collection by illustrator, browse every artist's cards and see which ones you own. Each card links to Serebii and Art of Pokémon.
 - **Login + roles (RBAC)**: Admin, Editor, Viewer and Pending, plus an activity log, a "recently removed" trash and backups.
@@ -39,9 +43,10 @@ A phone-friendly web app for tracking a Pokémon card collection:
 | Raw market price | TCGplayer (USD) + Cardmarket (EUR), via TCGdex | Automatic, refreshed daily for cards in your collection |
 | eBay "last sold" | **You log them** in the app | eBay closed its public sold-listings API in 2025 and doesn't allow scraping. Each grade has a one-tap link to eBay's sold results. |
 | Graded price points | PriceCharting (optional) | Needs a paid PriceCharting subscription. Their prices are built from eBay sales. |
+| Exchange rates | European Central Bank daily reference rates | Free. Our API fetches them twice a day and converts USD/EUR prices into your currency. |
 
 **How a copy is valued:**
-- **Raw:** TCGplayer market price for that exact printing, then PriceCharting ungraded, then your logged sales.
+- **Raw:** TCGplayer market price for that exact printing, then PriceCharting ungraded, then Cardmarket's trend price (for cards TCGplayer doesn't list), then your logged sales.
 - **Graded:** median of your recent logged sales for that grade (last 180 days), then PriceCharting, then older sales.
 
 ## Set it up (one time, about 15 minutes, all free)
@@ -75,7 +80,7 @@ npm run deploy                     # creates the tables, then publishes the API
 
 It prints your API address, e.g. `https://pokevault-api.<your-subdomain>.workers.dev`.
 
-`api/wrangler.jsonc` already allows requests from `https://iiryzii.github.io`. If you use a different GitHub username or a custom domain, update `ALLOWED_ORIGINS` and run `npm run deploy` again.
+The collection is valued in **GBP** (`"CURRENCY"` in `api/wrangler.jsonc`: GBP, USD, EUR, CAD or AUD). `api/wrangler.jsonc` also already allows requests from `https://iiryzii.github.io`. If you use a different GitHub username or a custom domain, update `ALLOWED_ORIGINS` and run `npm run deploy` again.
 
 ### 3. Turn on the website (GitHub Pages)
 
@@ -156,6 +161,6 @@ To test on your phone before deploying, use the GitHub Pages URL. The camera and
 
 ## Credits
 
-Card data and images come from [TCGdex](https://tcgdex.dev), an open-source Pokémon TCG database. Market prices are TCGplayer and Cardmarket data as published by TCGdex. Links go to eBay, PriceCharting, TCGplayer, Cardmarket, [Serebii](https://www.serebii.net/card/) and [Art of Pokémon](https://www.artofpkm.com/).
+Card data and images come from [TCGdex](https://tcgdex.dev), an open-source Pokémon TCG database. Where TCGdex has no picture, the app tries [pokemontcg.io](https://pokemontcg.io)'s image instead. Exchange rates come from the [European Central Bank](https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html). Market prices are TCGplayer and Cardmarket data as published by TCGdex. Links go to eBay, PriceCharting, TCGplayer, Cardmarket, [Serebii](https://www.serebii.net/card/) and [Art of Pokémon](https://www.artofpkm.com/).
 
 PokéVault is an unofficial fan project. Pokémon and all related names are trademarks of Nintendo, Creatures and GAME FREAK.

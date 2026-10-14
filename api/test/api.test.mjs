@@ -44,7 +44,9 @@ async function check(name, fn) {
 const today = new Date().toISOString().slice(0, 10);
 const alice = { email: 'alice@example.com', password: 'correct horse battery' };
 const bob = { email: 'Bob@Example.com', password: 'another good password' };
-let A, B, charizardId, pikachuId, saleId, bobId;
+let A, B, charizardId, pikachuId, saleId, bobId, fx;
+const round2 = (n) => Math.round(n * 100) / 100;
+const usdToGbp = (usd) => round2((usd / fx.perEur.USD) * fx.perEur.GBP);
 
 console.log(`Testing ${BASE}`);
 try {
@@ -52,6 +54,13 @@ try {
     const { data, headers } = await api('GET', '/api/auth/status', { expect: 200 });
     assert.equal(data.hasUsers, false, 'Database is not fresh — delete api/.wrangler and restart wrangler dev');
     assert.equal(headers.get('access-control-allow-origin'), 'http://localhost:5173');
+  });
+
+  await check('status: home currency is GBP with today’s ECB rates', async () => {
+    const { data } = await api('GET', '/api/auth/status', { expect: 200 });
+    assert.equal(data.currency, 'GBP');
+    assert.ok(data.fx?.perEur?.GBP > 0 && data.fx?.perEur?.USD > 0, JSON.stringify(data.fx));
+    fx = data.fx;
   });
 
   await check('first sign-up becomes admin', async () => {
@@ -111,6 +120,7 @@ try {
       expect: 201,
     });
     charizardId = data.item.id;
+    assert.equal(data.item.purchaseCurrency, 'GBP', 'purchase currency defaults to the home currency');
     assert.equal(data.item.name, 'Charizard');
     assert.equal(data.item.setName, 'Base Set');
     assert.equal(data.item.number, '4');
@@ -130,7 +140,11 @@ try {
     });
     pikachuId = data.item.id;
     assert.equal(data.item.valueSource, 'tcgplayer', JSON.stringify(data.item));
-    assert.ok(data.item.value > 0);
+    assert.equal(data.item.valueCurrency, 'GBP');
+    assert.match(data.item.valueDetail, /converted from USD/);
+    const card = await api('GET', '/api/cards/sv03.5-025', { token: B, expect: 200 });
+    const usd = card.data.prices.find((p) => p.source === 'tcgplayer' && p.variant === 'reverse').market;
+    assert.equal(data.item.value, usdToGbp(usd), 'TCGplayer USD price converted to GBP');
   });
 
   await check('validation: wrong printing, bad grade, unknown card', async () => {
@@ -159,18 +173,37 @@ try {
   await check('logging an eBay PSA 9 sale values the slab from sales', async () => {
     const { data } = await api('POST', '/api/sales', {
       token: B,
-      body: { cardId: 'base1-4', grader: 'PSA', grade: 9, price: 1525.5, soldOn: today, url: 'https://www.ebay.com/itm/1' },
+      body: { cardId: 'base1-4', grader: 'PSA', grade: 9, price: 1525.5, soldOn: today, url: 'https://www.ebay.co.uk/itm/1' },
       expect: 201,
     });
     saleId = data.sale.id;
+    assert.equal(data.sale.currency, 'GBP', 'sale currency defaults to the home currency');
     const list = await api('GET', '/api/collection', { token: B, expect: 200 });
     const zard = list.data.items.find((i) => i.id === charizardId);
     assert.equal(zard.value, 1525.5);
+    assert.equal(zard.valueCurrency, 'GBP');
     assert.equal(zard.valueSource, 'sales');
+    assert.equal(list.data.summary.currency, 'GBP');
     assert.ok(list.data.summary.totalValue >= 1525.5);
     await api('POST', '/api/sales', {
       token: B,
       body: { cardId: 'base1-4', grader: 'PSA', grade: 9, price: 10, soldOn: '2999-01-01' },
+      expect: 400,
+    });
+  });
+
+  await check('a USD sale is converted before taking the median; bad currencies are rejected', async () => {
+    const { data } = await api('POST', '/api/sales', {
+      token: B,
+      body: { cardId: 'base1-4', grader: 'PSA', grade: 9, price: 2000, currency: 'USD', soldOn: today },
+      expect: 201,
+    });
+    const item = await api('GET', `/api/collection/${charizardId}`, { token: B, expect: 200 });
+    assert.equal(item.data.item.value, round2((usdToGbp(2000) + 1525.5) / 2));
+    await api('DELETE', `/api/sales/${data.sale.id}`, { token: B, expect: 200 });
+    await api('POST', '/api/sales', {
+      token: B,
+      body: { cardId: 'base1-4', grader: 'PSA', grade: 9, price: 5, currency: 'BTC', soldOn: today },
       expect: 400,
     });
   });

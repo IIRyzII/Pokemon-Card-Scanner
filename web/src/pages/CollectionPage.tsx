@@ -5,7 +5,7 @@ import { ItemTile } from '../components/CardTile.tsx';
 import { IconPlus, IconSearch } from '../components/Icons.tsx';
 import { canonicalArtist, normName, type Catalog } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
-import { money } from '../lib/format.ts';
+import { useCurrency } from '../lib/currency.tsx';
 import { href } from '../lib/router.ts';
 import { useSession } from '../lib/session.tsx';
 import { useCatalog } from '../lib/useCatalog.ts';
@@ -36,8 +36,13 @@ const numberValue = (n: string) => {
   return m ? parseInt(m[0], 10) : 0;
 };
 
-function sortItems(items: CollectionItem[], sort: SortKey, catalog: Catalog | null): CollectionItem[] {
-  const total = (i: CollectionItem) => (i.value ?? -1) * i.quantity;
+function sortItems(
+  items: CollectionItem[],
+  sort: SortKey,
+  catalog: Catalog | null,
+  convert: (amount: number | null, from: string) => number | null,
+): CollectionItem[] {
+  const total = (i: CollectionItem) => (convert(i.value, i.valueCurrency ?? 'USD') ?? -1) * i.quantity;
   const setDate = (i: CollectionItem) => catalog?.sets.find((s) => s.id === i.setId)?.date ?? '';
   const artist = (i: CollectionItem) => canonicalArtist(catalog, i.artist) ?? '￿';
   const list = [...items];
@@ -63,6 +68,7 @@ export function CollectionPage() {
   const { data, error, loading, reload } = useCollection();
   const { user } = useSession();
   const { catalog } = useCatalog();
+  const { format, convert, currency } = useCurrency();
   const [query, setQuery] = useState('');
   const [sort, setSortState] = useState<SortKey>(readSort);
   const [filter, setFilter] = useState<'all' | 'raw' | 'graded'>('all');
@@ -88,8 +94,8 @@ export function CollectionPage() {
       );
       return q.split(' ').every((w) => hay.includes(w));
     });
-    return sortItems(filtered, sort, catalog);
-  }, [data, query, filter, sort, catalog]);
+    return sortItems(filtered, sort, catalog, convert);
+  }, [data, query, filter, sort, catalog, convert]);
 
   // When sorted by artist, show a header per artist.
   const groups = useMemo(() => {
@@ -100,10 +106,10 @@ export function CollectionPage() {
       let g = out[out.length - 1];
       if (!g || g.artist !== a) out.push((g = { artist: a, items: [], value: 0 }));
       g.items.push(item);
-      g.value += (item.value ?? 0) * item.quantity;
+      g.value += (convert(item.value, item.valueCurrency ?? 'USD') ?? 0) * item.quantity;
     }
     return out;
-  }, [items, sort, catalog]);
+  }, [items, sort, catalog, convert]);
 
   const s = data?.summary;
 
@@ -112,7 +118,7 @@ export function CollectionPage() {
       <section className="summary">
         <div>
           <div className="muted small">Collection value</div>
-          <div className="big-value">{s ? money(s.totalValue) : '—'}</div>
+          <div className="big-value">{s ? format(s.totalValue, s.currency) : '—'}</div>
         </div>
         <div className="stats">
           <div>
@@ -194,7 +200,7 @@ export function CollectionPage() {
               <h2 className="group-head">
                 <a href={href('artist', g.artist)}>🖌 {g.artist}</a>
                 <span className="faint small">
-                  {g.items.length} · {money(g.value)}
+                  {g.items.length} · {format(g.value, currency)}
                 </span>
               </h2>
               <div className="grid">

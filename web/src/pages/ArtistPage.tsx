@@ -4,13 +4,14 @@ import { CatalogTile } from '../components/CardTile.tsx';
 import { IconBack, IconExternal } from '../components/Icons.tsx';
 import { artistKey } from '../lib/catalog.ts';
 import { ownedCount, useCollection } from '../lib/collection.tsx';
-import { money } from '../lib/format.ts';
+import { useCurrency } from '../lib/currency.tsx';
 import { goBack } from '../lib/router.ts';
 import { useCatalog } from '../lib/useCatalog.ts';
 
 export function ArtistPage({ name }: { name: string }) {
   const { catalog, error } = useCatalog();
   const { ownedByCard, data } = useCollection();
+  const { convert, format, currency } = useCurrency();
   const [onlyOwned, setOnlyOwned] = useState(false);
   const [order, setOrder] = useState<'new' | 'old'>('new');
   const artist = catalog?.artistByKey.get(artistKey(name));
@@ -28,8 +29,8 @@ export function ArtistPage({ name }: { name: string }) {
     const key = artistKey(name);
     return (data?.items ?? [])
       .filter((i) => i.artist && artistKey(i.artist) === key)
-      .reduce((sum, i) => sum + (i.value ?? 0) * i.quantity, 0);
-  }, [data, name]);
+      .reduce((sum, i) => sum + (convert(i.value, i.valueCurrency ?? 'USD') ?? 0) * i.quantity, 0);
+  }, [data, name, convert]);
   const ownedCards = artist ? artist.cards.filter((c) => ownedByCard.has(c.id)).length : 0;
 
   return (
@@ -44,7 +45,7 @@ export function ArtistPage({ name }: { name: string }) {
         <>
           <p className="muted">
             {artist.cards.length} cards illustrated · you own {ownedCards}
-            {ownedValue > 0 && ` (worth ${money(ownedValue)})`}
+            {ownedValue > 0 && ` (worth ${format(ownedValue, currency)})`}
           </p>
           <div className="link-row">
             <a className="chip" href={artOfPkmArtistUrl(artist.name)} target="_blank" rel="noreferrer">

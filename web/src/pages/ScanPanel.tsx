@@ -237,7 +237,13 @@ ${result.bottomText.trim()}`);
                   return (
                     <button key={c.card.id} className="tile as-button" onClick={() => navigate(`/card/${encodeURIComponent(c.card.id)}`)}>
                       <div className="tile-img">
-                        <CardImage base={c.card.image} name={c.card.name} subtitle={c.card.set.name} />
+                        <CardImage
+                          base={c.card.image}
+                          name={c.card.name}
+                          subtitle={c.card.set.name}
+                          setId={c.card.set.id}
+                          number={c.card.number}
+                        />
                         {owned > 0 && <span className="badge owned-badge">Owned ×{owned}</span>}
                       </div>
                       <div className="tile-body">

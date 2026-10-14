@@ -6,7 +6,17 @@ export interface ChartPoint {
 }
 
 /** Small line chart of a price series, with logged sales as dots. */
-export function PriceChart({ series, sales = [], label }: { series: ChartPoint[]; sales?: ChartPoint[]; label: string }) {
+export function PriceChart({
+  series,
+  sales = [],
+  label,
+  currency,
+}: {
+  series: ChartPoint[];
+  sales?: ChartPoint[];
+  label: string;
+  currency: string;
+}) {
   const all = [...series, ...sales];
   if (all.length < 2) {
     return <p className="faint small">History builds up automatically as prices refresh each day.</p>;
@@ -45,14 +55,14 @@ export function PriceChart({ series, sales = [], label }: { series: ChartPoint[]
         {sales.map((s, i) => (
           <circle key={i} cx={x(s.day)} cy={y(s.price)} r={4} className="sale">
             <title>
-              Sold {money(s.price)} on {shortDate(s.day)}
+              Sold {money(s.price, currency)} on {shortDate(s.day)}
             </title>
           </circle>
         ))}
       </svg>
       <div className="chart-scale">
         <span>
-          {money(minY)} – {money(maxY)}
+          {money(minY, currency)} – {money(maxY, currency)}
         </span>
         <span>
           {shortDate(new Date(minX).toISOString())} → {shortDate(new Date(maxX).toISOString())}

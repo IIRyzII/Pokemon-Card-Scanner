@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from 'react';
+import { CURRENCIES, CURRENCY_INFO, isCurrency } from '../../../shared/currency.ts';
 import { MIN_PASSWORD_LENGTH } from '../../../shared/password.ts';
 import { ROLE_INFO } from '../../../shared/types.ts';
 import { useFeedback } from '../components/feedback.tsx';
 import { api, getApiUrl } from '../lib/api.ts';
+import { useCurrency } from '../lib/currency.tsx';
 import { derivePasswordKey } from '../lib/password.ts';
 import { navigate } from '../lib/router.ts';
 import { useSession } from '../lib/session.tsx';
@@ -13,6 +15,7 @@ export function AccountPage() {
   const { user, setUser, signOut, server } = useSession();
   const { catalog } = useCatalog();
   const { toast } = useFeedback();
+  const { currency, home, chosen, setCurrency, ratesDate, ebayDomain } = useCurrency();
   const [name, setName] = useState(user?.displayName ?? '');
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -72,6 +75,29 @@ export function AccountPage() {
       </section>
 
       <section className="card-section">
+        <h2>Currency</h2>
+        <label>
+          Show prices in
+          <select
+            value={chosen ? currency : ''}
+            onChange={(e) => setCurrency(isCurrency(e.target.value) ? e.target.value : null)}
+            aria-label="Currency"
+          >
+            <option value="">Collection default — {CURRENCY_INFO[home].label}</option>
+            {CURRENCIES.map((c) => (
+              <option key={c} value={c}>
+                {CURRENCY_INFO[c].label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="muted small">
+          TCGplayer and PriceCharting (US dollars) and Cardmarket (euros) prices are converted using the European Central
+          Bank&apos;s daily rates{ratesDate ? ` (${shortDate(ratesDate)})` : ''}. eBay links open {ebayDomain}.
+        </p>
+      </section>
+
+      <section className="card-section">
         <h2>Change password</h2>
         <form className="form" onSubmit={changePassword}>
           <label>
@@ -111,7 +137,10 @@ export function AccountPage() {
             database, rebuilt into PokéVault's own catalog every week
             {catalog && ` (current copy: ${shortDate(catalog.builtAt)}, ${catalog.cards.length.toLocaleString()} cards)`}.
           </li>
-          <li>Raw market prices: TCGplayer (USD) and Cardmarket (EUR), refreshed daily by the PokéVault API, which keeps its own price history.</li>
+          <li>
+            Raw market prices: TCGplayer (USD) and Cardmarket (EUR), refreshed daily by the PokéVault API, which keeps its own
+            price history, and converted to your currency.
+          </li>
           <li>
             Graded prices: eBay sold prices logged in the app, plus PriceCharting
             {server?.providers.pricecharting ? ' (connected)' : ' (if a token is configured)'}.

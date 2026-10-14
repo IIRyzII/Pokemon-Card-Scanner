@@ -1,11 +1,14 @@
 // How much is a copy worth? One function used by the API (to store each item's
 // value) and the web app (to preview a value before adding a card).
+// Prices come in several currencies (TCGplayer/PriceCharting USD, Cardmarket EUR,
+// logged sales in whatever they were entered in) and are converted to one.
 
+import { convert, type FxRates } from './currency.ts';
 import { PRICE_GRADE_LABELS, gradeText, priceGradeKey } from './grading.ts';
 
 export interface PriceRow {
   source: 'tcgplayer' | 'cardmarket' | 'pricecharting';
-  /** Our variant key (normal, holo, reverse, firstEdition, wPromo) */
+  /** Our variant key (normal, holo, reverse, firstEdition, wPromo); Cardmarket uses 'main' / 'holo' */
   variant: string;
   /** 'ungraded' for market prices, otherwise a PriceGradeKey */
   gradeKey: string;
@@ -26,6 +29,7 @@ export interface SaleRow {
   grade: number | null;
   gradeLabel: string | null;
   price: number;
+  currency: string;
   soldOn: string;
   source: string;
   url: string | null;
@@ -41,16 +45,26 @@ export interface ItemLike {
   gradeLabel: string | null;
 }
 
+/** The currency to value things in, plus the exchange rates to get there. */
+export interface ValueContext {
+  currency: string;
+  fx: FxRates | null;
+}
+
 export interface Valuation {
+  /** Value of one copy in ctx.currency */
   unit: number | null;
-  source: 'tcgplayer' | 'pricecharting' | 'sales' | null;
+  currency: string;
+  source: 'tcgplayer' | 'cardmarket' | 'pricecharting' | 'sales' | null;
   detail: string;
 }
 
 export interface SalesSummary {
   count: number;
   last: SaleRow | null;
-  /** Median of the most recent (up to) five sales */
+  /** The last sale's price converted to the target currency */
+  lastPrice: number | null;
+  /** Median of the most recent (up to) five sales, in the target currency */
   median: number | null;
 }
 
@@ -67,9 +81,14 @@ export function matchingSales(sales: SaleRow[], grader: string, grade: number | 
     .sort((a, b) => b.soldOn.localeCompare(a.soldOn) || b.createdAt.localeCompare(a.createdAt));
 }
 
-export function summarizeSales(sorted: SaleRow[]): SalesSummary {
-  const recent = sorted.slice(0, 5).map((s) => s.price);
-  return { count: sorted.length, last: sorted[0] ?? null, median: median(recent) };
+export function summarizeSales(sorted: SaleRow[], ctx: ValueContext): SalesSummary {
+  const inCurrency = (s: SaleRow) => convert(s.price, s.currency, ctx.currency, ctx.fx);
+  const recent = sorted
+    .slice(0, 5)
+    .map(inCurrency)
+    .filter((v): v is number => v !== null);
+  const last = sorted[0] ?? null;
+  return { count: sorted.length, last, lastPrice: last ? inCurrency(last) : null, median: median(recent) };
 }
 
 export function median(values: number[]): number | null {
@@ -83,43 +102,62 @@ function daysAgo(isoDate: string, now: Date): number {
   return (now.getTime() - new Date(`${isoDate.slice(0, 10)}T00:00:00Z`).getTime()) / 86_400_000;
 }
 
-export function valueItem(item: ItemLike, prices: PriceRow[], sales: SaleRow[], now = new Date()): Valuation {
+/** Cardmarket reports a main price and a "holo" price (the reverse holo for modern cards). */
+function cardmarketVariant(variant: string): string | null {
+  if (variant === 'reverse') return 'holo';
+  if (variant === 'firstEdition') return null; // Cardmarket's top-level price is the unlimited print
+  return 'main';
+}
+
+export function valueItem(item: ItemLike, prices: PriceRow[], sales: SaleRow[], ctx: ValueContext, now = new Date()): Valuation {
+  const conv = (amount: number | null, from: string) => (amount === null ? null : convert(amount, from, ctx.currency, ctx.fx));
+  const result = (unit: number | null, source: Valuation['source'], detail: string): Valuation => ({
+    unit,
+    currency: ctx.currency,
+    source,
+    detail,
+  });
   const sold = matchingSales(sales, item.grader, item.grade, item.gradeLabel);
   const recentSold = sold.filter((s) => daysAgo(s.soldOn, now) <= RECENT_SALE_DAYS);
-  const fromSales = (list: SaleRow[]): Valuation => ({
-    unit: summarizeSales(list).median,
-    source: 'sales',
-    detail: `Median of last ${Math.min(list.length, 5)} logged sale${list.length === 1 ? '' : 's'}`,
-  });
+  const fromSales = (list: SaleRow[]): Valuation | null => {
+    const m = summarizeSales(list, ctx).median;
+    const n = Math.min(list.length, 5);
+    return m === null ? null : result(m, 'sales', `Median of last ${n} logged sale${n === 1 ? '' : 's'}`);
+  };
+  const fromRow = (row: PriceRow | undefined, source: Valuation['source'], detail: string): Valuation | null => {
+    const unit = row ? conv(row.market, row.currency) : null;
+    if (unit === null || !row) return null;
+    const converted = row.currency !== ctx.currency ? ` (converted from ${row.currency})` : '';
+    return result(unit, source, `${detail}${converted}`);
+  };
   const pcRow = (gradeKey: string) =>
-    prices.find(
-      (p) => p.source === 'pricecharting' && p.variant === item.variant && p.gradeKey === gradeKey && p.market != null,
-    );
+    prices.find((p) => p.source === 'pricecharting' && p.variant === item.variant && p.gradeKey === gradeKey && p.market != null);
 
   if (item.grader === 'RAW') {
-    const tcg = prices.find((p) => p.source === 'tcgplayer' && p.variant === item.variant && p.market != null);
-    if (tcg) return { unit: tcg.market, source: 'tcgplayer', detail: 'TCGplayer market price' };
-    const pc = pcRow('ungraded');
-    if (pc) return { unit: pc.market, source: 'pricecharting', detail: 'PriceCharting ungraded' };
-    if (sold.length) return fromSales(recentSold.length ? recentSold : sold);
-    return { unit: null, source: null, detail: 'No raw price yet' };
+    const cmVariant = cardmarketVariant(item.variant);
+    return (
+      fromRow(
+        prices.find((p) => p.source === 'tcgplayer' && p.variant === item.variant && p.market != null),
+        'tcgplayer',
+        'TCGplayer market price',
+      ) ??
+      fromRow(pcRow('ungraded'), 'pricecharting', 'PriceCharting ungraded') ??
+      fromRow(
+        cmVariant ? prices.find((p) => p.source === 'cardmarket' && p.variant === cmVariant && p.market != null) : undefined,
+        'cardmarket',
+        'Cardmarket trend',
+      ) ??
+      (sold.length ? fromSales(recentSold.length ? recentSold : sold) : null) ??
+      result(null, null, 'No raw price yet')
+    );
   }
 
-  if (recentSold.length) return fromSales(recentSold);
   const key = priceGradeKey(item.grader, item.grade, item.gradeLabel);
-  const pc = key ? pcRow(key) : undefined;
-  if (pc && key) {
-    const generic = key.startsWith('g');
-    return {
-      unit: pc.market,
-      source: 'pricecharting',
-      detail: `PriceCharting ${PRICE_GRADE_LABELS[key]}${generic ? ' (any grader)' : ''}`,
-    };
-  }
-  if (sold.length) return fromSales(sold);
-  return {
-    unit: null,
-    source: null,
-    detail: `No ${gradeText(item.grader, item.grade, item.gradeLabel)} price yet — log an eBay sale`,
-  };
+  const pcDetail = key ? `PriceCharting ${PRICE_GRADE_LABELS[key]}${key.startsWith('g') ? ' (any grader)' : ''}` : '';
+  return (
+    (recentSold.length ? fromSales(recentSold) : null) ??
+    (key ? fromRow(pcRow(key), 'pricecharting', pcDetail) : null) ??
+    (sold.length ? fromSales(sold) : null) ??
+    result(null, null, `No ${gradeText(item.grader, item.grade, item.gradeLabel)} price yet — log an eBay sale`)
+  );
 }

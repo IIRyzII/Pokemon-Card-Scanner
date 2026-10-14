@@ -13,8 +13,9 @@ import {
   type CardRef,
 } from '../../../shared/links.ts';
 import type { CardDetailResponse } from '../../../shared/types.ts';
-import { matchingSales, summarizeSales, type ItemLike } from '../../../shared/values.ts';
+import { matchingSales, summarizeSales, type ItemLike, type ValueContext } from '../../../shared/values.ts';
 import { api } from '../lib/api.ts';
+import { useCurrency } from '../lib/currency.tsx';
 import { money, relativeTime, shortDate } from '../lib/format.ts';
 import { variantLabel } from './CardTile.tsx';
 import { useFeedback } from './feedback.tsx';
@@ -47,6 +48,7 @@ const COMMON_GRADES: { grader: string; grade: number; gradeLabel: string | null 
 export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSalesChanged }: Props) {
   const { card, prices, sales } = detail;
   const { toast, confirm } = useFeedback();
+  const { format, convert, currency, ctx, ebayDomain, ratesDate } = useCurrency();
   const [busy, setBusy] = useState(false);
   const [saleFor, setSaleFor] = useState<{ grader: string; grade: number | null; gradeLabel: string | null } | null>(null);
   const ref: CardRef = { name: card.name, number: card.number, setName: card.setName, setTotal: card.setTotal };
@@ -80,20 +82,35 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
   // History: the series matching what we're valuing.
   const focusKey = focus ? priceGradeKey(focus.grader, focus.grade, focus.gradeLabel) : 'ungraded';
   const graded = !!focus && focus.grader !== 'RAW';
-  const series: ChartPoint[] = detail.history
-    .filter((h) =>
-      graded
-        ? h.source === 'pricecharting' && h.variant === variant && h.gradeKey === focusKey
-        : h.source === 'tcgplayer' && h.variant === variant,
-    )
-    .map((h) => ({ day: h.day, price: h.price }));
-  const salePoints: ChartPoint[] = (focus ? matchingSales(sales, focus.grader, focus.grade, focus.gradeLabel) : []).map((s) => ({
-    day: s.soldOn,
-    price: s.price,
-  }));
+  const cmVariant = variant === 'reverse' ? 'holo' : 'main';
+  const rawSource = detail.history.some((h) => h.source === 'tcgplayer' && h.variant === variant) ? 'tcgplayer' : 'cardmarket';
+  const toPoints = (rows: { day: string; price: number; currency: string }[]): ChartPoint[] =>
+    rows.flatMap((r) => {
+      const price = convert(r.price, r.currency);
+      return price === null ? [] : [{ day: r.day, price }];
+    });
+  const series = toPoints(
+    detail.history
+      .filter((h) =>
+        graded
+          ? h.source === 'pricecharting' && h.variant === variant && h.gradeKey === focusKey
+          : rawSource === 'tcgplayer'
+            ? h.source === 'tcgplayer' && h.variant === variant
+            : h.source === 'cardmarket' && h.variant === cmVariant,
+      )
+      .map((h) => ({ day: h.day, price: h.price, currency: h.source === 'cardmarket' ? 'EUR' : 'USD' })),
+  );
+  const salePoints = toPoints(
+    (focus ? matchingSales(sales, focus.grader, focus.grade, focus.gradeLabel) : []).map((s) => ({
+      day: s.soldOn,
+      price: s.price,
+      currency: s.currency,
+    })),
+  );
   const chartLabel = graded
     ? `${gradeText(focus!.grader, focus!.grade, focus!.gradeLabel)} · ${variantLabel(variant)}`
-    : `Raw · ${variantLabel(variant)} (TCGplayer market)`;
+    : `Raw · ${variantLabel(variant)} (${rawSource === 'tcgplayer' ? 'TCGplayer market' : 'Cardmarket trend'})`;
+  const converted = prices.some((p) => p.currency !== currency) || sales.some((s) => s.currency !== currency);
 
   async function refresh() {
     setBusy(true);
@@ -164,10 +181,10 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
                     {variantLabel(p.variant)} <span className="faint small">TCGplayer</span>
                   </td>
                   <td>
-                    <strong>{money(p.market)}</strong>
+                    <strong>{format(p.market, p.currency)}</strong>
                   </td>
-                  <td>{money(p.low)}</td>
-                  <td>{money(p.high)}</td>
+                  <td>{format(p.low, p.currency)}</td>
+                  <td>{format(p.high, p.currency)}</td>
                 </tr>
               ))}
               {cm.map((p) => (
@@ -176,12 +193,12 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
                     {p.variant === 'holo' ? 'Holo / reverse' : 'Main'} <span className="faint small">Cardmarket</span>
                   </td>
                   <td>
-                    <strong>{money(p.market, 'EUR')}</strong>
+                    <strong>{format(p.market, p.currency)}</strong>
                     <div className="faint small">trend</div>
                   </td>
-                  <td>{money(p.low, 'EUR')}</td>
+                  <td>{format(p.low, p.currency)}</td>
                   <td>
-                    {money(p.mid, 'EUR')}
+                    {format(p.mid, p.currency)}
                     <div className="faint small">30-day avg</div>
                   </td>
                 </tr>
@@ -191,6 +208,12 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
         </div>
       ) : (
         <p className="faint small">No market prices reported for this card yet.</p>
+      )}
+      {converted && (
+        <p className="faint small">
+          Shown in {currency}, converted at the European Central Bank's daily rates
+          {ratesDate ? ` (${shortDate(ratesDate)})` : ''}.
+        </p>
       )}
 
       <h3>Graded</h3>
@@ -213,10 +236,10 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
           <tbody>
             <tr className={isFocus({ grader: 'RAW', grade: null, gradeLabel: null }) ? 'hl' : ''}>
               <td>Raw</td>
-              {detail.providers.pricecharting && <td>{money(pcPrice('ungraded'))}</td>}
-              <SalesCell sales={sales} grader="RAW" grade={null} gradeLabel={null} />
+              {detail.providers.pricecharting && <td>{format(pcPrice('ungraded'), 'USD')}</td>}
+              <SalesCell sales={sales} ctx={ctx} grader="RAW" grade={null} gradeLabel={null} />
               <td>
-                <a href={ebaySoldUrl(ref)} target="_blank" rel="noreferrer">
+                <a href={ebaySoldUrl(ref, 'RAW', null, null, ebayDomain)} target="_blank" rel="noreferrer">
                   Sold <IconExternal />
                 </a>
               </td>
@@ -228,13 +251,13 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
                   <td>{gradeText(g.grader, g.grade, g.gradeLabel)}</td>
                   {detail.providers.pricecharting && (
                     <td title={key ? PRICE_GRADE_LABELS[key] : ''}>
-                      {money(pcPrice(key))}
+                      {format(pcPrice(key), 'USD')}
                       {key?.startsWith('g') && pcPrice(key) !== null && <div className="faint small">any grader</div>}
                     </td>
                   )}
-                  <SalesCell sales={sales} grader={g.grader} grade={g.grade} gradeLabel={g.gradeLabel} />
+                  <SalesCell sales={sales} ctx={ctx} grader={g.grader} grade={g.grade} gradeLabel={g.gradeLabel} />
                   <td>
-                    <a href={ebaySoldUrl(ref, g.grader, g.grade, g.gradeLabel)} target="_blank" rel="noreferrer">
+                    <a href={ebaySoldUrl(ref, g.grader, g.grade, g.gradeLabel, ebayDomain)} target="_blank" rel="noreferrer">
                       Sold <IconExternal />
                     </a>
                   </td>
@@ -275,7 +298,8 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
           {sales.slice(0, 30).map((s) => (
             <li key={s.id}>
               <span className="sale-grade">{gradeText(s.grader, s.grade, s.gradeLabel)}</span>
-              <strong>{money(s.price)}</strong>
+              <strong>{format(s.price, s.currency)}</strong>
+              {s.currency !== currency && <span className="faint small">({money(s.price, s.currency)})</span>}
               <span className="faint small">
                 {shortDate(s.soldOn)} · {s.url ? (
                   <a href={s.url} target="_blank" rel="noreferrer">
@@ -299,11 +323,16 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
       )}
 
       <h3>History</h3>
-      <PriceChart series={series} sales={salePoints} label={chartLabel} />
+      <PriceChart series={series} sales={salePoints} label={chartLabel} currency={currency} />
 
       <h3>Look it up</h3>
       <div className="link-row">
-        <a className="chip" href={ebaySoldUrl(ref, focus?.grader ?? 'RAW', focus?.grade, focus?.gradeLabel)} target="_blank" rel="noreferrer">
+        <a
+          className="chip"
+          href={ebaySoldUrl(ref, focus?.grader ?? 'RAW', focus?.grade, focus?.gradeLabel, ebayDomain)}
+          target="_blank"
+          rel="noreferrer"
+        >
           eBay sold <IconExternal />
         </a>
         <a className="chip" href={priceChartingSearchUrl(ref)} target="_blank" rel="noreferrer">
@@ -334,16 +363,22 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
   );
 }
 
-function SalesCell(props: { sales: CardDetailResponse['sales']; grader: string; grade: number | null; gradeLabel: string | null }) {
+function SalesCell(props: {
+  sales: CardDetailResponse['sales'];
+  ctx: ValueContext;
+  grader: string;
+  grade: number | null;
+  gradeLabel: string | null;
+}) {
   const list = matchingSales(props.sales, props.grader, props.grade, props.gradeLabel);
-  const s = summarizeSales(list);
+  const s = summarizeSales(list, props.ctx);
   if (!s.count) return <td className="faint">—</td>;
   return (
     <td>
-      <strong>{money(s.last?.price)}</strong>
+      <strong>{money(s.lastPrice, props.ctx.currency)}</strong>
       <div className="faint small">
         {shortDate(s.last?.soldOn)}
-        {s.count > 1 && ` · median ${money(s.median)} (${s.count})`}
+        {s.count > 1 && ` · median ${money(s.median, props.ctx.currency)} (${s.count})`}
       </div>
     </td>
   );

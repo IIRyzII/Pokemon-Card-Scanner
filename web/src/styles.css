@@ -439,6 +439,16 @@ legend {
   font-size: 0.85rem;
 }
 
+.money-input {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 6px;
+  margin-top: 6px;
+}
+.money-input select,
+.money-input input {
+  margin-top: 0;
+}
 .stepper {
   display: grid;
   grid-template-columns: 44px 1fr 44px;

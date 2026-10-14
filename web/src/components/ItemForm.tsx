@@ -11,9 +11,11 @@ import {
   type Grader,
   type Variant,
 } from '../../../shared/grading.ts';
+import { CURRENCIES } from '../../../shared/currency.ts';
 import type { ItemFields } from '../../../shared/types.ts';
+import { useCurrency } from '../lib/currency.tsx';
 
-export function defaultFields(variants: string[]): ItemFields {
+export function defaultFields(variants: string[], currency: string): ItemFields {
   return {
     variant: variants[0] ?? 'normal',
     grader: 'RAW',
@@ -22,6 +24,7 @@ export function defaultFields(variants: string[]): ItemFields {
     condition: 'NM',
     quantity: 1,
     purchasePrice: null,
+    purchaseCurrency: currency,
     purchaseDate: null,
     certNumber: null,
     notes: null,
@@ -35,6 +38,7 @@ interface Props {
 }
 
 export function ItemForm({ value, onChange, variants }: Props) {
+  const { currency } = useCurrency();
   const set = (patch: Partial<ItemFields>) => onChange({ ...value, ...patch });
   const graded = value.grader !== 'RAW';
   const labels = GRADE_LABELS[value.grader as Grader] ?? [];
@@ -165,15 +169,27 @@ export function ItemForm({ value, onChange, variants }: Props) {
         </label>
         <label>
           Paid (each) <span className="faint">(optional)</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step="0.01"
-            value={value.purchasePrice ?? ''}
-            onChange={(e) => set({ purchasePrice: e.target.value === '' ? null : Number(e.target.value) })}
-            placeholder="$0.00"
-          />
+          <div className="money-input">
+            <select
+              aria-label="Purchase currency"
+              value={value.purchaseCurrency ?? currency}
+              onChange={(e) => set({ purchaseCurrency: e.target.value })}
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="0.01"
+              aria-label="Price paid each"
+              value={value.purchasePrice ?? ''}
+              onChange={(e) => set({ purchasePrice: e.target.value === '' ? null : Number(e.target.value) })}
+              placeholder="0.00"
+            />
+          </div>
         </label>
       </div>
       <label>

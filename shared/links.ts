@@ -14,7 +14,13 @@ export function cardNumberText(number: string, setTotal?: number | null): string
 
 const q = encodeURIComponent;
 
-export function ebaySoldUrl(card: CardRef, grader = 'RAW', grade?: number | null, label?: string | null): string {
+export function ebaySoldUrl(
+  card: CardRef,
+  grader = 'RAW',
+  grade?: number | null,
+  label?: string | null,
+  domain = 'www.ebay.com',
+): string {
   const num = cardNumberText(card.number, card.setTotal);
   const parts = [card.name, num];
   if (!num.includes('/')) parts.push(card.setName);
@@ -26,7 +32,7 @@ export function ebaySoldUrl(card: CardRef, grader = 'RAW', grade?: number | null
     parts.push('-PSA -BGS -CGC -SGC -TAG -graded -slab');
   }
   // LH_Sold + LH_Complete = sold listings only; _sop=13 = most recently ended first.
-  return `https://www.ebay.com/sch/i.html?_nkw=${q(parts.join(' '))}&LH_Sold=1&LH_Complete=1&_sop=13`;
+  return `https://${domain}/sch/i.html?_nkw=${q(parts.join(' '))}&LH_Sold=1&LH_Complete=1&_sop=13`;
 }
 
 export function priceChartingSearchUrl(card: CardRef): string {

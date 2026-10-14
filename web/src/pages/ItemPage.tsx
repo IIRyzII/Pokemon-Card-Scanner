@@ -11,7 +11,8 @@ import { Sheet } from '../components/Sheet.tsx';
 import { api } from '../lib/api.ts';
 import { canonicalArtist } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
-import { money, relativeTime, shortDate } from '../lib/format.ts';
+import { useCurrency } from '../lib/currency.tsx';
+import { relativeTime, shortDate } from '../lib/format.ts';
 import { goBack, href, navigate } from '../lib/router.ts';
 import { useSession } from '../lib/session.tsx';
 import { useCatalog } from '../lib/useCatalog.ts';
@@ -26,6 +27,7 @@ export function ItemPage({ id }: { id: string }) {
   const { catalog } = useCatalog();
   const { reload } = useCollection();
   const { toast, confirm } = useFeedback();
+  const { convert, format, currency } = useCurrency();
   const canEdit = hasRole(user?.role, 'editor');
 
   const load = useCallback(async () => {
@@ -45,8 +47,11 @@ export function ItemPage({ id }: { id: string }) {
   if (!item) return <div className="spinner" aria-label="Loading" />;
 
   const artist = canonicalArtist(catalog, item.artist);
-  const total = item.value !== null ? item.value * item.quantity : null;
-  const paid = item.purchasePrice !== null ? item.purchasePrice * item.quantity : null;
+  // Everything shown in the viewer's currency.
+  const each = convert(item.value, item.valueCurrency ?? 'USD');
+  const total = each !== null ? each * item.quantity : null;
+  const paidEach = convert(item.purchasePrice, item.purchaseCurrency ?? 'USD');
+  const paid = paidEach !== null ? paidEach * item.quantity : null;
   const gain = total !== null && paid !== null ? total - paid : null;
 
   async function save() {
@@ -91,7 +96,15 @@ export function ItemPage({ id }: { id: string }) {
         <IconBack /> Back
       </button>
       <div className="hero">
-        <CardImage base={item.image} name={item.name} quality="high" eager className="hero-img" />
+        <CardImage
+          base={item.image}
+          name={item.name}
+          quality="high"
+          eager
+          className="hero-img"
+          setId={item.setId}
+          number={item.number}
+        />
         <div className="hero-info">
           <h1>{item.name}</h1>
           <p className="muted">
@@ -110,14 +123,16 @@ export function ItemPage({ id }: { id: string }) {
           </div>
 
           <div className="value-box">
-            <div className="muted small">{item.quantity > 1 ? `Value (${item.quantity} × ${money(item.value)})` : 'Value'}</div>
-            <div className="big-value">{money(total)}</div>
+            <div className="muted small">
+              {item.quantity > 1 ? `Value (${item.quantity} × ${format(each, currency)})` : 'Value'}
+            </div>
+            <div className="big-value">{format(total, currency)}</div>
             <div className="faint small">
               {item.valueDetail} {item.valueUpdatedAt && `· ${relativeTime(item.valueUpdatedAt)}`}
             </div>
             {gain !== null && (
               <div className={gain >= 0 ? 'up' : 'down'}>
-                {gain >= 0 ? '▲' : '▼'} {money(Math.abs(gain))} vs. {money(paid)} paid
+                {gain >= 0 ? '▲' : '▼'} {format(Math.abs(gain), currency)} vs. {format(paid, currency)} paid
               </div>
             )}
           </div>
@@ -177,6 +192,7 @@ export function ItemPage({ id }: { id: string }) {
                     condition: item.condition,
                     quantity: item.quantity,
                     purchasePrice: item.purchasePrice,
+                    purchaseCurrency: item.purchaseCurrency ?? (item.purchasePrice !== null ? 'USD' : currency),
                     purchaseDate: item.purchaseDate,
                     certNumber: item.certNumber,
                     notes: item.notes,

@@ -7,6 +7,7 @@ import type { CardDetailResponse, CardInfo, ItemFields } from '../../../shared/t
 import { valueItem } from '../../../shared/values.ts';
 import { api } from '../lib/api.ts';
 import { useCollection } from '../lib/collection.tsx';
+import { useCurrency } from '../lib/currency.tsx';
 import { money, shortDate } from '../lib/format.ts';
 import { navigate } from '../lib/router.ts';
 import { CardImage } from './CardImage.tsx';
@@ -22,14 +23,15 @@ interface Props {
 }
 
 export function AddToCollection({ card, detail, onClose }: Props) {
+  const { ctx, currency } = useCurrency();
   const [step, setStep] = useState<'details' | 'confirm'>('details');
-  const [fields, setFields] = useState<ItemFields>(() => defaultFields(card.variants));
+  const [fields, setFields] = useState<ItemFields>(() => defaultFields(card.variants, currency));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useFeedback();
   const { reload } = useCollection();
 
-  const estimate = detail ? valueItem(fields, detail.prices, detail.sales) : null;
+  const estimate = detail ? valueItem(fields, detail.prices, detail.sales, ctx) : null;
   const number = cardNumberText(card.number, card.setTotal);
   const alreadyOwned = detail?.owned.reduce((n, i) => n + i.quantity, 0) ?? 0;
 
@@ -65,7 +67,7 @@ export function AddToCollection({ card, detail, onClose }: Props) {
         }
       >
         <div className="mini-card">
-          <CardImage base={card.image} name={card.name} />
+          <CardImage base={card.image} name={card.name} setId={card.setId} number={card.number} />
           <div>
             <strong>{card.name}</strong>
             <div className="muted">
@@ -87,7 +89,9 @@ export function AddToCollection({ card, detail, onClose }: Props) {
     ['Quantity', String(fields.quantity)],
   ];
   if (fields.certNumber) rows.push(['Cert #', fields.certNumber]);
-  if (fields.purchasePrice !== null) rows.push(['Paid', `${money(fields.purchasePrice)} each`]);
+  if (fields.purchasePrice !== null) {
+    rows.push(['Paid', `${money(fields.purchasePrice, fields.purchaseCurrency ?? currency)} each`]);
+  }
   if (fields.purchaseDate) rows.push(['Bought', shortDate(fields.purchaseDate)]);
   if (fields.notes) rows.push(['Notes', fields.notes]);
 
@@ -108,7 +112,7 @@ export function AddToCollection({ card, detail, onClose }: Props) {
     >
       <p className="confirm-q">Add this card to the collection?</p>
       <div className="confirm-card">
-        <CardImage base={card.image} name={card.name} quality="high" eager />
+        <CardImage base={card.image} name={card.name} quality="high" eager setId={card.setId} number={card.number} />
         <dl className="facts">
           {rows.map(([k, v]) => (
             <div key={k}>
@@ -119,7 +123,7 @@ export function AddToCollection({ card, detail, onClose }: Props) {
           <div>
             <dt>Est. value</dt>
             <dd>
-              <strong>{estimate?.unit != null ? money(estimate.unit * fields.quantity) : '—'}</strong>
+              <strong>{estimate?.unit != null ? money(estimate.unit * fields.quantity, estimate.currency) : '—'}</strong>
               {estimate && <div className="faint small">{estimate.detail}</div>}
             </dd>
           </div>

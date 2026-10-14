@@ -6,6 +6,8 @@ export interface Env {
   ALLOWED_ORIGINS: string;
   /** "open" (default) or "closed" */
   REGISTRATION?: string;
+  /** Home currency for values and totals: GBP, USD, EUR, CAD or AUD */
+  CURRENCY?: string;
   /** Optional paid PriceCharting API token (secret) — enables graded price points */
   PRICECHARTING_TOKEN?: string;
   /** Override for tests */

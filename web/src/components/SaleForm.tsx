@@ -1,9 +1,11 @@
 // Log a sold comp (e.g. an eBay "last sold") for this card.
 
 import { useState } from 'react';
+import { CURRENCIES } from '../../../shared/currency.ts';
 import { GRADERS, GRADER_LABELS, GRADES, GRADE_LABELS, type Grader } from '../../../shared/grading.ts';
 import { ebaySoldUrl, type CardRef } from '../../../shared/links.ts';
 import { api } from '../lib/api.ts';
+import { useCurrency } from '../lib/currency.tsx';
 import { todayIso } from '../lib/format.ts';
 import { useFeedback } from './feedback.tsx';
 import { IconExternal } from './Icons.tsx';
@@ -18,6 +20,8 @@ interface Props {
 }
 
 export function SaleForm({ cardId, card, initial, onClose, onSaved }: Props) {
+  const { currency: displayCurrency, ebayDomain } = useCurrency();
+  const [currency, setCurrency] = useState<string>(displayCurrency);
   const [grader, setGrader] = useState(initial?.grader ?? 'RAW');
   const [grade, setGrade] = useState<number>(initial?.grade ?? 10);
   const [label, setLabel] = useState<string | null>(initial?.gradeLabel ?? null);
@@ -46,6 +50,7 @@ export function SaleForm({ cardId, card, initial, onClose, onSaved }: Props) {
         grade: graded ? grade : null,
         gradeLabel: graded && grade === 10 ? label : null,
         price: amount,
+        currency,
         soldOn,
         source: 'eBay',
         url: url.trim() || null,
@@ -77,7 +82,7 @@ export function SaleForm({ cardId, card, initial, onClose, onSaved }: Props) {
     >
       <p className="muted small">
         Look up recent sales, then enter one here. Your logged sales are used to value graded copies.{' '}
-        <a href={ebaySoldUrl(card, grader, graded ? grade : null, label)} target="_blank" rel="noreferrer">
+        <a href={ebaySoldUrl(card, grader, graded ? grade : null, label, ebayDomain)} target="_blank" rel="noreferrer">
           Open eBay sold listings <IconExternal />
         </a>
       </p>
@@ -119,17 +124,25 @@ export function SaleForm({ cardId, card, initial, onClose, onSaved }: Props) {
         )}
         <div className="row2">
           <label>
-            Sold for (USD)
-            <input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="0.01"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder="0.00"
-              autoFocus
-            />
+            Sold for
+            <div className="money-input">
+              <select aria-label="Sale currency" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                {CURRENCIES.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                aria-label="Sold price"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="0.00"
+                autoFocus
+              />
+            </div>
           </label>
           <label>
             Sold on

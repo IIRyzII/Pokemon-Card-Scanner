@@ -1,5 +1,6 @@
 // Shapes exchanged between the web app and the PokéVault API.
 
+import type { FxRates } from './currency.ts';
 import type { PriceRow, SaleRow } from './values.ts';
 
 export const ROLES = ['pending', 'viewer', 'editor', 'admin'] as const;
@@ -32,6 +33,10 @@ export interface ApiStatus {
   hasUsers: boolean;
   registration: 'open' | 'closed';
   providers: { tcgdex: true; pricecharting: boolean };
+  /** The collection's home currency (values and totals are kept in it) */
+  currency: string;
+  /** Latest ECB exchange rates, used to show prices in other currencies */
+  fx: FxRates | null;
 }
 
 export interface AuthResponse {
@@ -70,6 +75,8 @@ export interface ItemFields {
   condition: string | null;
   quantity: number;
   purchasePrice: number | null;
+  /** Currency the purchase price was entered in */
+  purchaseCurrency: string | null;
   purchaseDate: string | null;
   certNumber: string | null;
   notes: string | null;
@@ -92,6 +99,8 @@ export interface CollectionItem extends ItemFields {
   image: string | null;
   dexId: number | null;
   value: number | null;
+  /** Currency of `value` (the home currency when it was last valued) */
+  valueCurrency: string | null;
   valueSource: string | null;
   valueDetail: string | null;
   valueUpdatedAt: string | null;
@@ -109,6 +118,7 @@ export interface CollectionResponse {
     cards: number;
     graded: number;
     totalValue: number;
+    currency: string;
     unpriced: number;
   };
 }
@@ -139,6 +149,7 @@ export interface NewSaleInput {
   grade: number | null;
   gradeLabel: string | null;
   price: number;
+  currency: string;
   soldOn: string;
   source: string;
   url: string | null;
@@ -156,4 +167,4 @@ export interface AuditEntry {
   createdAt: string;
 }
 
-export type { PriceRow, SaleRow };
+export type { FxRates, PriceRow, SaleRow };

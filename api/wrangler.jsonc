@@ -7,6 +7,9 @@
   "vars": {
     // Web origins allowed to call the API (your GitHub Pages site + local dev).
     "ALLOWED_ORIGINS": "https://iiryzii.github.io,http://localhost:5173,http://127.0.0.1:5173",
+    // Currency the collection is valued in: GBP, USD, EUR, CAD or AUD. Everyone can also
+    // pick their own display currency in the app (Account → Currency).
+    "CURRENCY": "GBP",
     // "open": anyone can sign up but starts as Pending until an admin approves them.
     // "closed": only the very first account (which becomes admin) can sign up.
     "REGISTRATION": "open"

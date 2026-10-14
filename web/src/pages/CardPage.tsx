@@ -9,7 +9,7 @@ import { PriceSection } from '../components/PriceSection.tsx';
 import { api } from '../lib/api.ts';
 import { canonicalArtist } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
-import { money } from '../lib/format.ts';
+import { useCurrency } from '../lib/currency.tsx';
 import { goBack, href } from '../lib/router.ts';
 import { useSession } from '../lib/session.tsx';
 import { useCatalog } from '../lib/useCatalog.ts';
@@ -19,6 +19,7 @@ export function CardPage({ cardId }: { cardId: string }) {
   const { catalog } = useCatalog();
   const { user } = useSession();
   const { reload } = useCollection();
+  const { format } = useCurrency();
   const [detail, setDetail] = useState<CardDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -51,7 +52,15 @@ export function CardPage({ cardId }: { cardId: string }) {
         <IconBack /> Back
       </button>
       <div className="hero">
-        <CardImage base={image} name={name} quality="high" eager className="hero-img" />
+        <CardImage
+          base={image}
+          name={name}
+          quality="high"
+          eager
+          className="hero-img"
+          setId={card?.setId ?? fromCatalog?.set.id}
+          number={card?.number ?? fromCatalog?.number}
+        />
         <div className="hero-info">
           <h1>{name}</h1>
           <p className="muted">
@@ -89,7 +98,7 @@ export function CardPage({ cardId }: { cardId: string }) {
                     <a href={href('item', o.id)}>
                       {gradeBadge(o)} · {variantLabel(o.variant)} ×{o.quantity}
                     </a>
-                    <span>{money(o.value === null ? null : o.value * o.quantity)}</span>
+                    <span>{format(o.value === null ? null : o.value * o.quantity, o.valueCurrency ?? 'USD')}</span>
                   </li>
                 ))}
               </ul>

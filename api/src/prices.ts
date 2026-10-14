@@ -4,6 +4,7 @@ import type { CardInfo, PriceRow } from '../../shared/types.ts';
 import { valueItem } from '../../shared/values.ts';
 import { toItem, toPrice, toSale } from './db.ts';
 import { HttpError, nowIso, todayIso, type Env } from './env.ts';
+import { getRates, homeCurrency } from './fx.ts';
 import { findProduct, pcProduct, productPrices } from './pricecharting.ts';
 import { extractPrices, fetchTcgdexCard, fetchTcgdexSet, normalizeCard, type TcgdexSetInfo } from './tcgdex.ts';
 
@@ -188,20 +189,24 @@ export async function recomputeValues(env: Env, cardId: string): Promise<void> {
   if (!itemRows.length) return;
   const priceRows = (prices.results as Record<string, unknown>[]).map(toPrice);
   const saleRows = (sales.results as Record<string, unknown>[]).map(toSale);
+  const ctx = { currency: homeCurrency(env), fx: await getRates(env) };
   const now = nowIso();
   await env.DB.batch(
     itemRows.map((item) => {
-      const v = valueItem(item, priceRows, saleRows);
+      const v = valueItem(item, priceRows, saleRows, ctx);
       return env.DB.prepare(
-        'UPDATE collection_items SET value = ?, value_source = ?, value_detail = ?, value_updated_at = ? WHERE id = ?',
-      ).bind(v.unit, v.source, v.detail, now, item.id);
+        `UPDATE collection_items SET value = ?, value_currency = ?, value_source = ?, value_detail = ?, value_updated_at = ?
+          WHERE id = ?`,
+      ).bind(v.unit, v.currency, v.source, v.detail, now, item.id);
     }),
   );
 }
 
-/** Cron: refresh the stalest cards in the collection, staying under the free plan's 50 outbound requests. */
+/** Cron: refresh the stalest cards in the collection, staying under the free plan's 50 outbound requests
+ *  (one per card, plus the occasional set lookup and the exchange-rate fetch). */
 export async function scheduledRefresh(env: Env): Promise<void> {
-  const limit = env.PRICECHARTING_TOKEN ? 12 : 40;
+  await getRates(env); // keep exchange rates current even on quiet days
+  const limit = env.PRICECHARTING_TOKEN ? 12 : 35;
   const cutoff = new Date(Date.now() - PRICE_TTL_MS).toISOString();
   const { results } = await env.DB.prepare(
     `SELECT ci.card_id, MIN(pr.refreshed_at) AS refreshed_at

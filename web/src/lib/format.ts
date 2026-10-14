@@ -1,11 +1,19 @@
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-const usdRound = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-const eur = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR' });
+import { CURRENCY_INFO, isCurrency } from '../../../shared/currency.ts';
 
+const formatters = new Map<string, Intl.NumberFormat>();
+
+/** "£1,234.50", "$0.89", "€12.00" — formatted the way that currency's home country writes it. */
 export function money(value: number | null | undefined, currency = 'USD', opts: { round?: boolean } = {}): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—';
-  if (currency === 'EUR') return eur.format(value);
-  return (opts.round && Math.abs(value) >= 1000 ? usdRound : usd).format(value);
+  const round = !!opts.round && Math.abs(value) >= 1000;
+  const key = `${currency}|${round}`;
+  let fmt = formatters.get(key);
+  if (!fmt) {
+    const locale = isCurrency(currency) ? CURRENCY_INFO[currency].locale : 'en-GB';
+    fmt = new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: round ? 0 : 2 });
+    formatters.set(key, fmt);
+  }
+  return fmt.format(value);
 }
 
 export function shortDate(iso: string | null | undefined): string {

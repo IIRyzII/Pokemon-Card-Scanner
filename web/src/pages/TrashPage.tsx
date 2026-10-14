@@ -69,7 +69,7 @@ export function TrashPage() {
       <ul className="trash">
         {items?.map((item) => (
           <li key={item.id}>
-            <CardImage base={item.image} name={item.name} />
+            <CardImage base={item.image} name={item.name} setId={item.setId} number={item.number} />
             <div>
               <strong>{item.name}</strong>
               <div className="faint small">

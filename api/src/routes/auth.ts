@@ -14,6 +14,7 @@ import {
 } from '../auth.ts';
 import { auditStmt, toUser } from '../db.ts';
 import { HttpError, nowIso, type AppEnv } from '../env.ts';
+import { getRates, homeCurrency } from '../fx.ts';
 import { email, readJson, requiredText } from '../validate.ts';
 
 export const API_VERSION = '1.0.0';
@@ -30,6 +31,8 @@ auth.get('/status', async (c) => {
     hasUsers: (row?.n ?? 0) > 0,
     registration: c.env.REGISTRATION === 'closed' ? 'closed' : 'open',
     providers: { tcgdex: true, pricecharting: !!c.env.PRICECHARTING_TOKEN },
+    currency: homeCurrency(c.env),
+    fx: await getRates(c.env),
   });
 });
 
