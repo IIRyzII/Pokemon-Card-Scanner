@@ -1,0 +1,29 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "pokevault-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "vars": {
+    // Web origins allowed to call the API (your GitHub Pages site + local dev).
+    "ALLOWED_ORIGINS": "https://iiryzii.github.io,http://localhost:5173,http://127.0.0.1:5173",
+    // "open": anyone can sign up but starts as Pending until an admin approves them.
+    // "closed": only the very first account (which becomes admin) can sign up.
+    "REGISTRATION": "open"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pokevault",
+      // Replace with the id printed by `npx wrangler d1 create pokevault` (see README).
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    // Hourly: refresh prices for cards in the collection that are more than ~20h old.
+    "crons": ["23 * * * *"]
+  }
+  // Optional secret (paid PriceCharting subscription, adds graded prices):
+  //   npx wrangler secret put PRICECHARTING_TOKEN
+}

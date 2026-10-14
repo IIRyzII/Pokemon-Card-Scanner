@@ -1,0 +1,63 @@
+# Builds the card catalog + web app and publishes them to GitHub Pages.
+# Runs on every push to main, weekly (to pick up new card sets), or by hand.
+# Set the repository variable API_URL (Settings → Secrets and variables → Actions → Variables)
+# to your API address, e.g. https://pokevault-api.yourname.workers.dev
+name: Deploy web app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'shared/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-web.yml'
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Build our card catalog from the open TCGdex data
+        run: >
+          node scripts/build-catalog.mjs --out web/public/catalog
+          --fallback-url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/catalog"
+      - name: Unit tests
+        run: npm test
+      - name: Build web app
+        run: npm run build --workspace web
+        env:
+          VITE_API_URL: ${{ vars.API_URL }}
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

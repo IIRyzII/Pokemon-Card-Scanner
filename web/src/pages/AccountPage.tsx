@@ -1,0 +1,136 @@
+import { useState, type FormEvent } from 'react';
+import { MIN_PASSWORD_LENGTH } from '../../../shared/password.ts';
+import { ROLE_INFO } from '../../../shared/types.ts';
+import { useFeedback } from '../components/feedback.tsx';
+import { api, getApiUrl } from '../lib/api.ts';
+import { derivePasswordKey } from '../lib/password.ts';
+import { navigate } from '../lib/router.ts';
+import { useSession } from '../lib/session.tsx';
+import { useCatalog } from '../lib/useCatalog.ts';
+import { shortDate } from '../lib/format.ts';
+
+export function AccountPage() {
+  const { user, setUser, signOut, server } = useSession();
+  const { catalog } = useCatalog();
+  const { toast } = useFeedback();
+  const [name, setName] = useState(user?.displayName ?? '');
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [next2, setNext2] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (!user) return null;
+
+  async function rename(e: FormEvent) {
+    e.preventDefault();
+    try {
+      setUser((await api.rename(name.trim())).user);
+      toast('Name updated');
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    }
+  }
+
+  async function changePassword(e: FormEvent) {
+    e.preventDefault();
+    if (!user) return;
+    if (next.length < MIN_PASSWORD_LENGTH) return toast(`Use at least ${MIN_PASSWORD_LENGTH} characters`, 'error');
+    if (next !== next2) return toast("The new passwords don't match", 'error');
+    setBusy(true);
+    try {
+      await api.changePassword(await derivePasswordKey(user.email, current), await derivePasswordKey(user.email, next));
+      setCurrent('');
+      setNext('');
+      setNext2('');
+      toast('Password changed — other devices were signed out');
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="page narrow">
+      <h1>Account</h1>
+      <section className="card-section">
+        <p>
+          Signed in as <b>{user.email}</b>
+        </p>
+        <p>
+          Role: <span className="badge">{ROLE_INFO[user.role].label}</span>{' '}
+          <span className="muted small">{ROLE_INFO[user.role].description}</span>
+        </p>
+        <form className="form inline" onSubmit={rename}>
+          <label>
+            Display name
+            <input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} required />
+          </label>
+          <button className="btn" type="submit" disabled={name.trim() === user.displayName}>
+            Save
+          </button>
+        </form>
+      </section>
+
+      <section className="card-section">
+        <h2>Change password</h2>
+        <form className="form" onSubmit={changePassword}>
+          <label>
+            Current password
+            <input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+          </label>
+          <label>
+            New password
+            <input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
+          </label>
+          <label>
+            Confirm new password
+            <input type="password" autoComplete="new-password" value={next2} onChange={(e) => setNext2(e.target.value)} required />
+          </label>
+          <button className="btn primary" type="submit" disabled={busy}>
+            {busy ? 'Changing…' : 'Change password'}
+          </button>
+        </form>
+      </section>
+
+      <section className="card-section">
+        <h2>Use it like an app</h2>
+        <p className="muted small">
+          <b>iPhone:</b> open this page in Safari → Share → <i>Add to Home Screen</i>.<br />
+          <b>Android:</b> open it in Chrome → ⋮ menu → <i>Install app</i> (or <i>Add to Home screen</i>).
+        </p>
+      </section>
+
+      <section className="card-section">
+        <h2>About the data</h2>
+        <ul className="muted small">
+          <li>
+            Card names, sets, numbers, artists and images: the open{' '}
+            <a href="https://tcgdex.dev" target="_blank" rel="noreferrer">
+              TCGdex
+            </a>{' '}
+            database, rebuilt into PokéVault's own catalog every week
+            {catalog && ` (current copy: ${shortDate(catalog.builtAt)}, ${catalog.cards.length.toLocaleString()} cards)`}.
+          </li>
+          <li>Raw market prices: TCGplayer (USD) and Cardmarket (EUR), refreshed daily by the PokéVault API, which keeps its own price history.</li>
+          <li>
+            Graded prices: eBay sold prices logged in the app, plus PriceCharting
+            {server?.providers.pricecharting ? ' (connected)' : ' (if a token is configured)'}.
+          </li>
+          <li>Card scanning runs entirely on this device — photos are never uploaded.</li>
+          <li>Pokémon and all related names are trademarks of Nintendo, Creatures and GAME FREAK. PokéVault is a fan project.</li>
+        </ul>
+        <p className="faint small">Server: {getApiUrl()}</p>
+      </section>
+
+      <button
+        className="btn danger-outline block"
+        onClick={async () => {
+          await signOut();
+          navigate('/', true);
+        }}
+      >
+        Sign out
+      </button>
+    </div>
+  );
+}

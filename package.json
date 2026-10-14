@@ -1,0 +1,20 @@
+{
+  "name": "pokevault",
+  "private": true,
+  "description": "PokéVault — scan, price and track a Pokémon card collection. Phone-friendly web app (GitHub Pages) + our own API (Cloudflare Workers + D1).",
+  "workspaces": [
+    "web",
+    "api"
+  ],
+  "scripts": {
+    "catalog": "node scripts/build-catalog.mjs",
+    "dev:web": "npm run dev --workspace web",
+    "dev:api": "npm run dev --workspace api",
+    "build": "npm run build --workspace web",
+    "typecheck": "npm run typecheck --workspace web && npm run typecheck --workspace api",
+    "test": "node --test --experimental-strip-types \"shared/**/*.test.ts\" \"web/src/**/*.test.ts\""
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}
