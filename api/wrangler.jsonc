@@ -18,8 +18,8 @@
     {
       "binding": "DB",
       "database_name": "pokevault",
-      // Replace with the id printed by `npx wrangler d1 create pokevault` (see README).
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // Created with `npx wrangler d1 create pokevault` (see README).
+      "database_id": "66775561-ca79-4f3a-aaa3-27846ba54118",
       "migrations_dir": "migrations"
     }
   ],

@@ -2,7 +2,7 @@
 
 A phone-friendly web app for tracking a Pokémon card collection:
 
-- **Scan** a card with your phone camera (or a photo), or **search** by name / set / number (`charizard 4/102`).
+- **Scan** a card with your phone camera: hold it steady and **auto-scan** finds it on its own (or tap the shutter, or use a photo). Or **search** by name / set / number (`charizard 4/102`).
 - **Confirm before adding**: pick the printing (normal, holo, reverse, 1st edition), raw condition or graded slab (PSA, BGS, CGC, SGC, TAG, ACE), quantity and what you paid, then review and confirm.
 - Every card shows its **image, name, set, number** and **price**. Totals for the whole collection are at the top.
 - **Raw prices** (TCGplayer + Cardmarket) refresh daily, and the app keeps its **own price history**.
@@ -65,28 +65,33 @@ git push -u origin main
 
 ### 2. Create the API on Cloudflare
 
+> **Already done for this repo.** The API is live at **https://pokevault-api.pokevault-api.workers.dev**, using the D1 database whose id is in `api/wrangler.jsonc`.
+>
+> To publish API changes later, run `cd api && npm run deploy`. That applies any new database migrations and then publishes the Worker.
+
+Setting it up from scratch (e.g. for a fork):
+
 ```bash
 npm install
 cd api
-npx wrangler login                 # opens the browser once
-npx wrangler d1 create pokevault   # creates the database
+npx wrangler login                                       # opens the browser once
+npx wrangler d1 create pokevault --no-update-config      # creates the database
 ```
 
-Copy the `database_id` it prints into `api/wrangler.jsonc`, replacing the zeros. If Wrangler offers to add the binding for you, say **no**: it's already there. Then deploy:
+Copy the `database_id` it prints into `api/wrangler.jsonc`. Then deploy:
 
 ```bash
 npm run deploy                     # creates the tables, then publishes the API
 ```
 
-It prints your API address, e.g. `https://pokevault-api.<your-subdomain>.workers.dev`.
+It prints your API address. Put it in `web/.env.production` as `VITE_API_URL=…`.
 
 The collection is valued in **GBP** (`"CURRENCY"` in `api/wrangler.jsonc`: GBP, USD, EUR, CAD or AUD). `api/wrangler.jsonc` also already allows requests from `https://iiryzii.github.io`. If you use a different GitHub username or a custom domain, update `ALLOWED_ORIGINS` and run `npm run deploy` again.
 
 ### 3. Turn on the website (GitHub Pages)
 
 1. On GitHub: **Settings → Pages → Source: GitHub Actions**.
-2. **Settings → Secrets and variables → Actions → Variables → New repository variable**: name `API_URL`, value the address from step 2.
-3. **Actions → Deploy web app → Run workflow**.
+2. Push to `main`, or go to **Actions → Deploy web app → Run workflow**.
 
 Your app will be at **https://iiryzii.github.io/Pokemon-Card-Scanner/**.
 
@@ -129,7 +134,12 @@ The API enforces roles on every request, so hiding a button in the app is never 
 ## Scanning tips
 
 - Fill the on-screen frame with the card, keep it flat, and avoid glare from holo foil. The flashlight button helps in dim rooms.
-- The scanner reads the **name and HP** at the top and the **number / set size / set code** at the bottom (`025/165`, `MEW`, `TG05/TG30`, `SWSH050`). It then shows the closest matches with pictures.
+- **Auto-scan** is on by default: hold the card steady in the frame and the app finds it without you pressing anything.
+  - It only picks a card when the reading points to exactly one: the printed number and set, plus the name or HP.
+  - The line under the camera shows what it has read so far. If it can't be sure, it keeps trying on new frames. Tap the shutter to see the closest matches yourself.
+  - **Scan again** won't pick up the same card while it's still in view. Swap in the next card and it carries on.
+  - Turn it off with the **Auto-scan** button under the camera. The app remembers your choice.
+- The scanner reads the **name and HP** at the top and the **number / set size / set code** at the bottom (`025/165`, `MEW`, `TG05/TG30`, `SWSH050`). It then shows the best match, plus other close matches with pictures.
 - Nothing is added until you tap a match, review the details and press **Confirm & add**.
 - If the scan isn't sure, tap **Search instead**. Your words are pre-filled, so you can fix a letter or two.
 

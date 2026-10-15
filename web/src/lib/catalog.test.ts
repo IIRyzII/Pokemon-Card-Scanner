@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { buildCatalog, normNum, searchCards, type CatalogJson } from './catalog.ts';
-import { identifyCard, similarity } from './match.ts';
+import { identifyCard, matchConfidence, similarity, type ScanGuess } from './match.ts';
 
 const json = JSON.parse(readFileSync(new URL('../../public/catalog/catalog.json', import.meta.url), 'utf8')) as CatalogJson;
 const cat = buildCatalog(json);
@@ -92,4 +92,37 @@ test('identify: HP narrows a name-only read', () => {
 test('identify: slashless reading finds the vintage card', () => {
   const r = identifyCard(cat, { names: ['Charizard'], number: null, total: null, setCode: null, artist: null, alternatives: [{ number: '4', total: 102 }] });
   assert.equal(r[0].card.id, 'base1-4');
+});
+
+// Auto-scan picks a card on its own only when matchConfidence says so.
+const read = (g: Partial<ScanGuess>): ScanGuess => ({ names: [], number: null, total: null, setCode: null, artist: null, ...g });
+const confidence = (g: ScanGuess) => {
+  const r = identifyCard(cat, g, 12);
+  return { top: r[0]?.card.id, level: matchConfidence(g, r) };
+};
+
+test('confidence: number + set + name or HP is sure', () => {
+  assert.deepEqual(confidence(read({ names: ['Charizard'], number: '4', total: 102, hp: 120 })), { top: 'base1-4', level: 'sure' });
+  assert.deepEqual(confidence(read({ names: ['Pikachv'], number: '025', total: 165, setCode: 'MEW' })), { top: 'sv03.5-025', level: 'sure' });
+  assert.deepEqual(confidence(read({ number: '025', total: 165, setCode: 'MEW' })), { top: 'sv03.5-025', level: 'sure' });
+  assert.deepEqual(confidence(read({ hp: 120, alternatives: [{ number: '4', total: 102 }] })), { top: 'base1-4', level: 'sure' });
+  assert.deepEqual(confidence(read({ names: ['Charizard V'], number: 'SWSH050' })), { top: 'swshp-SWSH050', level: 'sure' });
+  // OCR fragments around the name (a real read of Darkness Ablaze Furret)
+  assert.deepEqual(confidence(read({ names: ['gist Furret GEE J.'], number: '136', total: 189 })), { top: 'swsh3-136', level: 'sure' });
+});
+
+test('confidence: a unique number on its own, or a misread digit, is only likely', () => {
+  assert.deepEqual(confidence(read({ number: '199', total: 165 })), { top: 'sv03.5-199', level: 'likely' });
+  assert.deepEqual(confidence(read({ names: ['Pikachu'], number: '625', total: 165 })), { top: 'sv03.5-025', level: 'likely' });
+});
+
+test('confidence: ambiguous or conflicting reads are never auto-picked', () => {
+  assert.equal(confidence(read({ names: ['Charizard'] })).level, null);
+  assert.equal(confidence(read({ names: ['Charizard'], hp: 120 })).level, null);
+  assert.equal(confidence(read({ number: '4', total: 102 })).level, null); // #4 in every 102-card set
+  assert.equal(confidence(read({ number: '025', total: 165 })).level, null); // Expedition has 165 cards too
+  assert.equal(confidence(read({ number: 'TG05', total: 30 })).level, null); // four Trainer Galleries
+  assert.equal(confidence(read({ names: ['Charizard'], number: '4', hp: 120 })).level, null); // Base Set vs Base Set 2
+  assert.equal(confidence(read({ names: ['Blastoise'], number: '4', total: 102, hp: 100 })).level, null);
+  assert.equal(confidence(read({})).level, null);
 });

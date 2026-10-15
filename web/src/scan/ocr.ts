@@ -1,9 +1,9 @@
 // On-device card reading with Tesseract (OCR runs in the browser; photos never leave the phone).
 // We read two strips of the card — the name at the top and the number/set code at the bottom.
 
-import { createWorker, OEM, PSM, type Worker } from 'tesseract.js';
+import { createWorker, OEM, PSM, type Page, type Worker } from 'tesseract.js';
 import type { ScanGuess } from '../lib/match.ts';
-import { buildGuess } from './parse.ts';
+import { buildGuess, parseHp } from './parse.ts';
 
 export const CARD_RATIO = 63 / 88; // width / height of a standard card
 
@@ -25,6 +25,14 @@ export interface ScanResult {
   guess: ScanGuess;
   topText: string;
   bottomText: string;
+}
+
+export interface ScanOptions {
+  onProgress?: (label: string) => void;
+  /** Stops between reading steps once aborted (the step already running finishes first). */
+  signal?: AbortSignal;
+  /** For auto-scan: stop after the name strip when it has no real words or HP (no card in view). */
+  quick?: boolean;
 }
 
 /** Copies part of the card (fractions of its size) into a new canvas, scaled and contrast-boosted. */
@@ -68,50 +76,94 @@ function enhance(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.putImageData(img, 0, 0);
 }
 
-export async function scanCard(card: HTMLCanvasElement, onProgress?: (label: string) => void): Promise<ScanResult> {
-  progressListener = (p, status) => {
-    if (status.startsWith('loading') || status.startsWith('initializ')) onProgress?.(`Loading reader… ${Math.round(p * 100)}%`);
+/**
+ * Whether OCR found a real word (3+ letters, read with confidence) rather than guessing at
+ * texture. In testing, card names read at 79–95 and a noisy tabletop at under 50.
+ */
+function hasRealWord(page: Page): boolean {
+  return !!page.blocks?.some((b) =>
+    b.paragraphs.some((p) => p.lines.some((l) => l.words.some((w) => w.confidence >= 60 && /[A-Za-zÀ-ÿ]{3}/.test(w.text)))),
+  );
+}
+
+// Every read changes the engine's settings, so reads take turns (auto-scan vs the shutter).
+let queue: Promise<unknown> = Promise.resolve();
+function exclusive<T>(job: () => Promise<T>): Promise<T> {
+  const run = queue.then(job);
+  queue = run.catch(() => undefined);
+  return run;
+}
+
+export function scanCard(card: HTMLCanvasElement, options: ScanOptions = {}): Promise<ScanResult> {
+  return exclusive(async () => {
+    options.signal?.throwIfAborted();
+    progressListener = (p, status) => {
+      if (status.startsWith('loading') || status.startsWith('initializ')) options.onProgress?.(`Loading reader… ${Math.round(p * 100)}%`);
+    };
+    try {
+      return await readCard(await warmUpOcr(), card, options);
+    } finally {
+      progressListener = null;
+    }
+  });
+}
+
+async function readCard(worker: Worker, card: HTMLCanvasElement, { onProgress, signal, quick }: ScanOptions): Promise<ScanResult> {
+  const step = (label: string) => {
+    signal?.throwIfAborted();
+    onProgress?.(label);
   };
-  const worker = await warmUpOcr();
-  onProgress?.('Reading the name…');
+  step('Reading the name…');
   await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK, tessedit_char_whitelist: '' });
-  const top = await worker.recognize(strip(card, 0.02, 0.01, 0.96, 0.12, 1000));
-  onProgress?.('Reading the card number…');
+  const top = await worker.recognize(strip(card, 0.02, 0.01, 0.96, 0.12, 1000), {}, { text: true, blocks: !!quick });
+  const topText = top.data.text;
+  if (quick && !hasRealWord(top.data) && !parseHp(topText)) {
+    // Only texture where the name should be: most likely no card in the frame yet.
+    return { guess: buildGuess('', ''), topText, bottomText: '' };
+  }
+  step('Reading the card number…');
   await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
   const bottom = await worker.recognize(strip(card, 0, 0.84, 1, 0.16, 1600));
   let bottomText = bottom.data.text;
-  let guess = buildGuess(top.data.text, bottomText);
+  let guess = buildGuess(topText, bottomText);
 
   if (!guess.number) {
     // The number is tiny: bottom-right on older cards ("4/102"), bottom-left on newer ones
     // ("MEW EN 025/165"). Zoom into each corner and read digits only.
-    onProgress?.('Looking closer at the number…');
+    step('Looking closer at the number…');
     await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: '0123456789/' });
     const corners: [number, number, number, number][] = [
       [0.55, 0.9, 0.45, 0.1],
       [0, 0.86, 0.55, 0.12],
     ];
     for (const [x, y, w, h] of corners) {
+      signal?.throwIfAborted();
       const r = await worker.recognize(strip(card, x, y, w, h, 1400));
       bottomText += `\n${r.data.text}`;
-      guess = buildGuess(top.data.text, bottomText);
+      guess = buildGuess(topText, bottomText);
       if (guess.number || guess.alternatives?.length) break;
     }
     await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, tessedit_char_whitelist: '' });
   }
   if (!guess.number && !guess.alternatives?.length) {
     // The card may sit a little high/low in the frame — try a taller strip.
-    onProgress?.('Looking harder…');
+    step('Looking harder…');
     const wide = await worker.recognize(strip(card, 0, 0.74, 1, 0.26, 1600));
     bottomText += `\n${wide.data.text}`;
-    guess = buildGuess(top.data.text, bottomText);
+    guess = buildGuess(topText, bottomText);
   }
-  progressListener = null;
-  return { guess, topText: top.data.text, bottomText };
+  return { guess, topText, bottomText };
 }
 
-/** Crops the on-screen guide frame out of the live camera video. */
-export function captureFrame(video: HTMLVideoElement, frame: HTMLElement): HTMLCanvasElement {
+export interface Crop {
+  sx: number;
+  sy: number;
+  sw: number;
+  sh: number;
+}
+
+/** Where the on-screen guide frame sits in the camera's own pixels. */
+export function frameCrop(video: HTMLVideoElement, frame: HTMLElement): Crop {
   const vr = video.getBoundingClientRect();
   const fr = frame.getBoundingClientRect();
   const vw = video.videoWidth;
@@ -121,8 +173,12 @@ export function captureFrame(video: HTMLVideoElement, frame: HTMLElement): HTMLC
   const offY = (vr.height - vh * scale) / 2;
   const sx = Math.max(0, (fr.left - vr.left - offX) / scale);
   const sy = Math.max(0, (fr.top - vr.top - offY) / scale);
-  const sw = Math.min(vw - sx, fr.width / scale);
-  const sh = Math.min(vh - sy, fr.height / scale);
+  return { sx, sy, sw: Math.min(vw - sx, fr.width / scale), sh: Math.min(vh - sy, fr.height / scale) };
+}
+
+/** Crops the on-screen guide frame out of the live camera video. */
+export function captureFrame(video: HTMLVideoElement, frame: HTMLElement): HTMLCanvasElement {
+  const { sx, sy, sw, sh } = frameCrop(video, frame);
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(sw);
   canvas.height = Math.round(sh);

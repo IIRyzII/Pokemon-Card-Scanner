@@ -134,3 +134,45 @@ export function identifyCard(cat: Catalog, guess: ScanGuess, limit = 12): Candid
     .sort((x, y) => y.score - x.score || (y.card.set.date ?? '').localeCompare(x.card.set.date ?? ''))
     .slice(0, limit);
 }
+
+/**
+ * How closely a catalog card's name matches what was read off the card (0–1). Runs of the read
+ * words as long as the card's name count too, so OCR fragments around it ("gist Furret GEE") don't hide it.
+ */
+export function nameMatch(guess: ScanGuess, card: CatalogCard): number {
+  const size = Math.max(1, card.nameWords.length);
+  let best = 0;
+  for (const name of guess.names) {
+    const read = normName(name);
+    best = Math.max(best, similarity(read, card.nameKey));
+    const words = read.split(' ');
+    for (let i = 0; i + size <= words.length; i++) best = Math.max(best, similarity(words.slice(i, i + size).join(' '), card.nameKey));
+  }
+  return best;
+}
+
+export type Confidence = 'sure' | 'likely';
+
+/**
+ * How sure we can be that the top candidate is the card that was scanned:
+ *  - 'sure': the printed number pins down the set (set size, set code or a prefixed
+ *    number like "SWSH050"), the name or HP agrees, and no other card comes close.
+ *    Auto-scan picks these by itself;
+ *  - 'likely': a clear leader on the number and set alone, or on a near-miss number
+ *    plus set and name. Shown first as the best match;
+ *  - null: too close to call, so the person picks from the list.
+ */
+export function matchConfidence(guess: ScanGuess, candidates: Candidate[]): Confidence | null {
+  const [top, next] = candidates;
+  if (!top || top.score - (next?.score ?? 0) < 15) return null;
+  const has = (why: string) => top.why.includes(why);
+  const set = has('set size') || has('set code');
+  // A slashless reading ("4102" → 4/102) only counts inside a set of that size, so it pins the set too.
+  const pinned = has('number') && (set || !guess.number || /^[A-Z]{1,4}\d/i.test(guess.number));
+  const nameSim = nameMatch(guess, top.card);
+  const agrees = nameSim >= 0.7 || (!!guess.hp && guess.hp === top.card.hp);
+  if (pinned && agrees) return 'sure';
+  if (has('number') && has('set size') && has('set code')) return 'sure';
+  if (pinned || (has('number≈') && set && nameSim >= 0.7)) return 'likely';
+  return null;
+}

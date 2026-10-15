@@ -40,6 +40,11 @@
   box-sizing: border-box;
 }
 
+/* Rules like `input { display: block }` would otherwise override the hidden attribute. */
+[hidden] {
+  display: none !important;
+}
+
 html {
   -webkit-text-size-adjust: 100%;
 }
@@ -1137,6 +1142,32 @@ button.tile.as-button {
   border: 3px solid rgba(255, 255, 255, 0.9);
   border-radius: 4.5% / 3.2%;
   box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+  transition: border-color 0.2s;
+}
+/* Auto-scan is reading: a line sweeps the frame, which turns yellow once part of the card is read. */
+.frame.seen {
+  border-color: rgba(255, 203, 61, 0.95);
+}
+.frame.auto::after {
+  content: '';
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  top: 6%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255, 203, 61, 0.9), transparent);
+  animation: sweep 2.4s ease-in-out infinite alternate;
+}
+@keyframes sweep {
+  to {
+    top: 94%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .frame.auto::after {
+    display: none;
+  }
 }
 .zone {
   position: absolute;
@@ -1171,6 +1202,53 @@ button.tile.as-button {
   display: grid;
   place-items: center;
   color: #fff;
+}
+.scan-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 520px;
+  margin: 10px auto 0;
+}
+.scan-status p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.auto-toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.auto-toggle::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.auto-toggle.on {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--green) 55%, transparent);
+}
+.auto-toggle.on::before {
+  background: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 25%, transparent);
+}
+.auto-toggle:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
 }
 .scan-controls {
   display: grid;
@@ -1235,6 +1313,59 @@ button.tile.as-button {
   border-radius: var(--radius);
   background: var(--surface);
   border: 1px solid var(--border);
+}
+.best-match {
+  margin: 18px 0 8px;
+}
+.best-match h2 {
+  margin: 0 0 8px;
+}
+.best-match.auto h2 {
+  color: var(--green);
+}
+.best-match > p {
+  margin: 8px 2px 0;
+}
+.best-card {
+  display: grid;
+  grid-template-columns: minmax(120px, 40%) 1fr;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.best-match.auto .best-card {
+  border-color: color-mix(in srgb, var(--green) 50%, var(--border));
+}
+.best-card:hover {
+  border-color: var(--faint);
+}
+.best-card:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.best-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.best-name {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.best-info .btn {
+  align-self: flex-start;
+  margin-top: 10px;
 }
 
 /* ---------- artists ---------- */
