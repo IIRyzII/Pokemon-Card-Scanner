@@ -1,7 +1,7 @@
 // On-device card reading with Tesseract (OCR runs in the browser; photos never leave the phone).
 // We read two strips of the card — the name at the top and the number/set code at the bottom.
 
-import { createWorker, OEM, PSM, type Page, type Worker } from 'tesseract.js';
+import { createWorker, OEM, PSM, type OutputFormats, type Page, type Worker } from 'tesseract.js';
 import type { ScanGuess } from '../lib/match.ts';
 import { buildGuess, parseHp } from './parse.ts';
 
@@ -86,6 +86,26 @@ function hasRealWord(page: Page): boolean {
   );
 }
 
+/** Frees a canvas's pixels now rather than at garbage collection (iPhone Safari caps the total). */
+export function releaseCanvas(canvas: HTMLCanvasElement) {
+  canvas.width = 0;
+  canvas.height = 0;
+}
+
+// (Not signal.throwIfAborted(): that needs iOS 15.4.)
+function checkAbort(signal?: AbortSignal) {
+  if (signal?.aborted) throw new DOMException('Scan cancelled', 'AbortError');
+}
+
+/** OCRs one strip of the card, then frees it. */
+async function readStrip(worker: Worker, image: HTMLCanvasElement, output?: Partial<OutputFormats>) {
+  try {
+    return await worker.recognize(image, {}, output);
+  } finally {
+    releaseCanvas(image);
+  }
+}
+
 // Every read changes the engine's settings, so reads take turns (auto-scan vs the shutter).
 let queue: Promise<unknown> = Promise.resolve();
 function exclusive<T>(job: () => Promise<T>): Promise<T> {
@@ -96,7 +116,7 @@ function exclusive<T>(job: () => Promise<T>): Promise<T> {
 
 export function scanCard(card: HTMLCanvasElement, options: ScanOptions = {}): Promise<ScanResult> {
   return exclusive(async () => {
-    options.signal?.throwIfAborted();
+    checkAbort(options.signal);
     progressListener = (p, status) => {
       if (status.startsWith('loading') || status.startsWith('initializ')) options.onProgress?.(`Loading reader… ${Math.round(p * 100)}%`);
     };
@@ -110,12 +130,12 @@ export function scanCard(card: HTMLCanvasElement, options: ScanOptions = {}): Pr
 
 async function readCard(worker: Worker, card: HTMLCanvasElement, { onProgress, signal, quick }: ScanOptions): Promise<ScanResult> {
   const step = (label: string) => {
-    signal?.throwIfAborted();
+    checkAbort(signal);
     onProgress?.(label);
   };
   step('Reading the name…');
   await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK, tessedit_char_whitelist: '' });
-  const top = await worker.recognize(strip(card, 0.02, 0.01, 0.96, 0.12, 1000), {}, { text: true, blocks: !!quick });
+  const top = await readStrip(worker, strip(card, 0.02, 0.01, 0.96, 0.12, 1000), { text: true, blocks: !!quick });
   const topText = top.data.text;
   if (quick && !hasRealWord(top.data) && !parseHp(topText)) {
     // Only texture where the name should be: most likely no card in the frame yet.
@@ -123,7 +143,7 @@ async function readCard(worker: Worker, card: HTMLCanvasElement, { onProgress, s
   }
   step('Reading the card number…');
   await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
-  const bottom = await worker.recognize(strip(card, 0, 0.84, 1, 0.16, 1600));
+  const bottom = await readStrip(worker, strip(card, 0, 0.84, 1, 0.16, 1600));
   let bottomText = bottom.data.text;
   let guess = buildGuess(topText, bottomText);
 
@@ -137,8 +157,8 @@ async function readCard(worker: Worker, card: HTMLCanvasElement, { onProgress, s
       [0, 0.86, 0.55, 0.12],
     ];
     for (const [x, y, w, h] of corners) {
-      signal?.throwIfAborted();
-      const r = await worker.recognize(strip(card, x, y, w, h, 1400));
+      checkAbort(signal);
+      const r = await readStrip(worker, strip(card, x, y, w, h, 1400));
       bottomText += `\n${r.data.text}`;
       guess = buildGuess(topText, bottomText);
       if (guess.number || guess.alternatives?.length) break;
@@ -148,7 +168,7 @@ async function readCard(worker: Worker, card: HTMLCanvasElement, { onProgress, s
   if (!guess.number && !guess.alternatives?.length) {
     // The card may sit a little high/low in the frame — try a taller strip.
     step('Looking harder…');
-    const wide = await worker.recognize(strip(card, 0, 0.74, 1, 0.26, 1600));
+    const wide = await readStrip(worker, strip(card, 0, 0.74, 1, 0.26, 1600));
     bottomText += `\n${wide.data.text}`;
     guess = buildGuess(topText, bottomText);
   }

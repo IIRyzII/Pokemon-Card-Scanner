@@ -67,7 +67,8 @@ export interface BottomInfo {
 /** "4102" → [{4, 102}], "025165" → [{025, 165}]; 4–6 digit runs only, years skipped. */
 export function slashlessReadings(text: string): { number: string; total: number }[] {
   const out: { number: string; total: number }[] = [];
-  for (const m of text.matchAll(/(?<![0-9A-Za-z])([0-9]{4,6})(?![0-9A-Za-z])/g)) {
+  // (No lookbehind: Safari before iOS 16.4 can't even load a file that contains one.)
+  for (const m of text.matchAll(/(?:^|[^0-9A-Za-z])([0-9]{4,6})(?![0-9A-Za-z])/g)) {
     const digits = m[1];
     if (/^(19|20)\d\d$/.test(digits)) continue;
     for (let i = 1; i <= 3; i++) {
@@ -133,7 +134,7 @@ export function parseBottomText(text: string): BottomInfo {
 
 /** "HP 120", "120 HP", "HP120" → 120 (Pokémon HP is always a multiple of 10). */
 export function parseHp(text: string): number | null {
-  const m = text.match(new RegExp(`\\bHP\\s*(${D}{2,3})(?![0-9])|(?<![0-9])(${D}{2,3})\\s*HP\\b`, 'i'));
+  const m = text.match(new RegExp(`\\bHP\\s*(${D}{2,3})(?![0-9])|(?:^|[^0-9])(${D}{2,3})\\s*HP\\b`, 'i'));
   if (!m) return null;
   const hp = parseInt(fixDigits(m[1] ?? m[2]), 10);
   return hp >= 10 && hp <= 400 && hp % 10 === 0 ? hp : null;

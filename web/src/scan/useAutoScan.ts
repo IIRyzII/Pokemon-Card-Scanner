@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 're
 import type { Catalog } from '../lib/catalog.ts';
 import { identifyCard, matchConfidence, nameMatch, type Candidate, type ScanGuess } from '../lib/match.ts';
 import { frameChange, snapshot } from './motion.ts';
-import { captureFrame, frameCrop, scanCard, warmUpOcr, type ScanResult } from './ocr.ts';
+import { captureFrame, frameCrop, releaseCanvas, scanCard, warmUpOcr, type ScanResult } from './ocr.ts';
 
 export type AutoStatus =
   | { state: 'loading' }
@@ -116,24 +116,28 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
         try {
           result = await scanCard(card, { signal, quick: true });
         } catch {
+          releaseCanvas(card);
           if (signal.aborted) return;
           restUntil = performance.now() + 1000;
           continue;
         }
-        if (signal.aborted) return;
+        if (signal.aborted) return releaseCanvas(card);
         const candidates = identifyCard(catalog, result.guess, 12);
         const top = candidates[0];
         // Only a sure read is picked by itself; anything less waits for a clearer frame or the shutter.
         // (Two "likely" reads agreeing proves little: a still camera repeats the same misread.)
         if (matchConfidence(result.guess, candidates) === 'sure') {
           if (top.card.id === lastFound && !moved) {
+            releaseCanvas(card);
             paused = true;
             show({ state: 'repeat', name: top.card.name });
             continue;
           }
-          found.current({ card, result, candidates });
+          found.current({ card, result, candidates }); // copies the frame for the preview
+          releaseCanvas(card);
           return;
         }
+        releaseCanvas(card);
         const seen = describe(result.guess, candidates);
         misses = seen ? 0 : misses + 1;
         restUntil = performance.now() + (seen ? 250 : Math.min(800 * misses, 3000));

@@ -1,5 +1,6 @@
 import { Suspense, lazy, useDeferredValue, useMemo, useState } from 'react';
 import { CatalogTile } from '../components/CardTile.tsx';
+import { ErrorBoundary } from '../components/ErrorBoundary.tsx';
 import { IconScan, IconSearch } from '../components/Icons.tsx';
 import { searchCards } from '../lib/catalog.ts';
 import { ownedCount, useCollection } from '../lib/collection.tsx';
@@ -21,12 +22,30 @@ export function AddPage({ tab, initialQuery }: { tab: 'search' | 'scan'; initial
         </a>
       </div>
       {tab === 'scan' ? (
-        <Suspense fallback={<div className="spinner" aria-label="Loading scanner" />}>
-          <ScanPanel />
-        </Suspense>
+        <ErrorBoundary fallback={(error) => <ScannerFailed error={error} />}>
+          <Suspense fallback={<div className="spinner" aria-label="Loading scanner" />}>
+            <ScanPanel />
+          </Suspense>
+        </ErrorBoundary>
       ) : (
         <SearchPanel initialQuery={initialQuery ?? ''} />
       )}
+    </div>
+  );
+}
+
+/** The scanner failed to load or crashed: say so (with the browser's reason) instead of a blank page. */
+function ScannerFailed({ error }: { error: Error }) {
+  return (
+    <div className="empty">
+      <p>The scanner couldn't start on this phone. Reloading usually fixes it after an app update.</p>
+      <p className="faint small">{error.message}</p>
+      <button className="btn primary" onClick={() => location.reload()}>
+        Reload
+      </button>{' '}
+      <a className="btn" href={href('add')}>
+        Search instead
+      </a>
     </div>
   );
 }

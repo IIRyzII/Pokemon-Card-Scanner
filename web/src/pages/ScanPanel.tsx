@@ -8,7 +8,7 @@ import { identifyCard, matchConfidence, type Candidate, type Confidence, type Sc
 import { ownedCount, useCollection } from '../lib/collection.tsx';
 import { href, navigate } from '../lib/router.ts';
 import { useCatalog } from '../lib/useCatalog.ts';
-import { captureFrame, photoToCard, scanCard, warmUpOcr, type ScanResult } from '../scan/ocr.ts';
+import { captureFrame, photoToCard, releaseCanvas, scanCard, warmUpOcr, type ScanResult } from '../scan/ocr.ts';
 import { markFound, useAutoScan, type AutoFound, type AutoStatus } from '../scan/useAutoScan.ts';
 
 type Phase = 'starting' | 'live' | 'nocamera' | 'reading' | 'results';
@@ -159,6 +159,8 @@ export function ScanPanel() {
       show({ preview: shot, guess: result.guess, rawText: rawTextOf(result), candidates, confidence, auto: false, error: null });
     } catch (err) {
       show({ preview: shot, guess: null, rawText: '', candidates: [], confidence: null, auto: false, error: `Couldn't read the card: ${(err as Error).message}` });
+    } finally {
+      releaseCanvas(card);
     }
   }
 
