@@ -9,7 +9,6 @@ import { useCurrency } from '../lib/currency.tsx';
 import { href } from '../lib/router.ts';
 import { useSession } from '../lib/session.tsx';
 import { useCatalog } from '../lib/useCatalog.ts';
-import { CollectionTabs } from './SetsPage.tsx';
 
 const SORTS = {
   recent: 'Recently added',
@@ -116,7 +115,6 @@ export function CollectionPage() {
 
   return (
     <div className="page">
-      <CollectionTabs on="cards" />
       <section className="summary">
         <div>
           <div className="muted small">Collection value</div>

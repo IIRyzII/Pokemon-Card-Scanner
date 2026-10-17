@@ -11,7 +11,7 @@ A phone-friendly web app for tracking a Pokémon card collection:
   - Logged sales and purchase prices remember the currency they were entered in.
   - eBay links open your local eBay (ebay.co.uk for GBP).
 - **Graded prices**: log eBay sold prices (one tap opens eBay's *sold* listings for that exact card and grade). Optional PriceCharting support fills in PSA/BGS/CGC/SGC prices automatically.
-- **Set progress**: see how complete each set is, and open a set to see every card in number order, with the ones you're missing greyed out.
+- **Sets**: every set (Paradox Rift, 151, Base Set…) in the **Sets** tab, with how close you are to completing it, what the whole set is worth at market prices, what your cards from it are worth, and what completing it would cost. Open a set to see every card in number order, with its price and the ones you're missing greyed out. You can also sort a set by price.
 - **Artists**: sort your collection by illustrator, browse every artist's cards and see which ones you own. Each card links to Serebii and Art of Pokémon.
 - **Login + roles (RBAC)**: Admin, Editor, Viewer and Pending, plus an activity log, a "recently removed" trash and backups.
 - Works like an app on your phone: **Add to Home Screen** and it opens full screen, even offline.
@@ -34,7 +34,7 @@ A phone-friendly web app for tracking a Pokémon card collection:
 
 - **`web/`**: the app (React + TypeScript + Vite). Card recognition runs **on the phone**, so photos are never uploaded: it finds the card in the camera picture, straightens it, matches its picture against every card, and reads the printed number with Tesseract OCR when that's needed.
 - **`api/`**: our own API, a Cloudflare Worker with a D1 database. GitHub Pages can only host static files, so the part that stores data lives on Cloudflare's free tier.
-- **`scripts/build-catalog.mjs`**: builds **our own card catalog** (≈21,000 cards, 205 sets, 400 artists) from the open [TCGdex](https://tcgdex.dev) data, plus a **fingerprint of every card's picture** (`prints.bin`, about 750 KB) that the scanner matches against. GitHub Actions rebuilds both every week, and the app searches and identifies scans against them with no third-party API calls.
+- **`scripts/build-catalog.mjs`**: builds **our own card catalog** (≈21,000 cards, 205 sets, 400 artists) from the open [TCGdex](https://tcgdex.dev) data, plus a **fingerprint of every card's picture** (`prints.bin`, about 750 KB) that the scanner matches against, and **every card's market price** (`prices.json`, about 210 KB) for set values. GitHub Actions rebuilds them every week, and the app searches, identifies scans and values sets with them with no third-party API calls.
 - **`shared/`**: code used by both: grading scales, how a copy is valued, and outbound links.
 
 ### Where prices come from
@@ -42,6 +42,7 @@ A phone-friendly web app for tracking a Pokémon card collection:
 | Price | Source | Notes |
 |---|---|---|
 | Raw market price | TCGplayer (USD) + Cardmarket (EUR), via TCGdex | Automatic, refreshed daily for cards in your collection |
+| Set values | The same market prices for every card in the catalog | One near-mint copy of each card's standard printing. Refreshed weekly when the site rebuilds. |
 | eBay "last sold" | **You log them** in the app | eBay closed its public sold-listings API in 2025 and doesn't allow scraping. Each grade has a one-tap link to eBay's sold results. |
 | Graded price points | PriceCharting (optional) | Needs a paid PriceCharting subscription. Their prices are built from eBay sales. |
 | Exchange rates | European Central Bank daily reference rates | Free. Our API fetches them twice a day and converts USD/EUR prices into your currency. |
@@ -165,6 +166,8 @@ npm run catalog             # rebuild the card catalog and picture fingerprints 
 ```
 
 The first `npm run catalog` downloads every card's small picture (about 20,000 images) to fingerprint them, which takes around 10 minutes. After that, fingerprints are reused and only new cards are downloaded. The weekly GitHub build reuses the ones already on your site. Without `prints.bin`, the scanner still works by reading the card's text.
+
+Market prices for set values take one small request per card (about 2 minutes). They're reused while they're less than 6 days old, so only the weekly build refreshes them (`--prices-max-age-days` changes that).
 
 To test on your phone before deploying, use the GitHub Pages URL. The camera and secure sign-in only work over `https://` or on `localhost`.
 

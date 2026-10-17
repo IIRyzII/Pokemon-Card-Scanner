@@ -20,6 +20,15 @@ export const IconCards = (p: P) => (
     <path d="M17 6.5l3 .8a1.5 1.5 0 0 1 1 1.8l-3 11.2a1.5 1.5 0 0 1-1.8 1L14 20.5" />
   </svg>
 );
+/** A binder page of cards (sets) */
+export const IconSets = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="3" y="3" width="7.5" height="8" rx="1.5" />
+    <rect x="13.5" y="3" width="7.5" height="8" rx="1.5" />
+    <rect x="3" y="13" width="7.5" height="8" rx="1.5" />
+    <rect x="13.5" y="13" width="7.5" height="8" rx="1.5" />
+  </svg>
+);
 export const IconPlus = (p: P) => (
   <svg {...base(p)}>
     <path d="M12 5v14M5 12h14" />

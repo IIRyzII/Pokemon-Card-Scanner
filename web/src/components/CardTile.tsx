@@ -53,7 +53,8 @@ export function ItemTile({ item, artist }: { item: CollectionItem; artist?: stri
   );
 }
 
-export function CatalogTile({ card, owned }: { card: CatalogCard; owned?: number }) {
+/** A catalog card. `price`: its market price, formatted (null = no price; leave out to show none). */
+export function CatalogTile({ card, owned, price }: { card: CatalogCard; owned?: number; price?: string | null }) {
   return (
     <a className={`tile ${owned ? 'owned' : ''}`} href={href('card', card.id)}>
       <div className="tile-img">
@@ -72,6 +73,7 @@ export function CatalogTile({ card, owned }: { card: CatalogCard; owned?: number
           {card.set.name} · #{cardNumberText(card.number, card.set.official)}
         </div>
         {card.rarity && <div className="tile-meta faint">{card.rarity}</div>}
+        {price !== undefined && <div className={`tile-value${price ? '' : ' none'}`}>{price ?? 'No price'}</div>}
       </div>
     </a>
   );

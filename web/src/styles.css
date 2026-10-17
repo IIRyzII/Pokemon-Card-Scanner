@@ -190,6 +190,7 @@ code {
 }
 .tabbar a {
   flex: 1;
+  min-width: 0;
   max-width: 140px;
   display: flex;
   flex-direction: column;
@@ -206,6 +207,12 @@ code {
 }
 .tabbar a.active {
   color: var(--accent);
+}
+.tabbar a span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .splash {
@@ -1538,6 +1545,31 @@ button.tile.as-button {
 }
 .value-box .progress + p {
   margin: 8px 0 0;
+}
+.set-value {
+  margin-top: 2px;
+  font-weight: 600;
+}
+.set-values {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+.set-values div {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.set-values dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.set-values dd {
+  margin: 2px 0 0;
+  font-weight: 800;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
 }
 /* Cards you don't have yet, greyed out like empty binder pockets. */
 .binder .tile:not(.owned) .card-img {

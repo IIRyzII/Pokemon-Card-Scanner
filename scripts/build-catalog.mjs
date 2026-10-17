@@ -6,11 +6,14 @@
 //
 // It also fingerprints every card's picture (prints.bin) so the scanner can recognise a card by
 // how it looks. Prints already published are reused, so only new cards' pictures are downloaded.
+// And it records every card's market price (prices.json) for set values; those are refreshed
+// when they're more than a few days old.
 //
-// Usage: node --experimental-strip-types scripts/build-catalog.mjs [--out web/public/catalog] [--if-missing] [--fallback-url https://you.github.io/repo/catalog]
+// Usage: node --experimental-strip-types scripts/build-catalog.mjs [--out web/public/catalog] [--if-missing] [--fallback-url https://you.github.io/repo/catalog] [--prices-max-age-days 6]
 //   --if-missing:   do nothing when a catalog already exists (used by `npm run dev`).
-//   --fallback-url: the published catalog: prints are reused from it, and if TCGdex is unreachable
-//                   the whole catalog is copied from it instead of failing.
+//   --fallback-url: the published catalog: prints and recent prices are reused from it, and if
+//                   TCGdex is unreachable the whole catalog is copied from it instead of failing.
+//   --prices-max-age-days: reuse earlier prices younger than this (default 6), else fetch them all.
 
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -18,6 +21,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import jpeg from 'jpeg-js';
 import { cardPrint, PRINT_SPEC, PRINT_WORDS } from '../shared/cardprint.ts';
+import { extractPrices, standardPrice } from '../shared/market.ts';
 
 const API = 'https://api.tcgdex.net/v2/en';
 const GQL = 'https://api.tcgdex.net/v2/graphql';
@@ -34,6 +38,7 @@ const argValue = (name) => {
 };
 const OUT_DIR = path.resolve(argValue('--out') ?? 'web/public/catalog');
 const FALLBACK_URL = argValue('--fallback-url');
+const PRICES_MAX_AGE_DAYS = Number(argValue('--prices-max-age-days') ?? 6);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -242,11 +247,7 @@ async function build() {
 
 /** Prints from an earlier build ({ version, byId: card id → print }), from disk or the published site. */
 async function previousPrints() {
-  const sources = [
-    async (file) => readFile(path.join(OUT_DIR, file)),
-    ...(FALLBACK_URL ? [async (file) => getBytes(`${FALLBACK_URL.replace(/\/$/, '')}/${file}`)] : []),
-  ];
-  for (const read of sources) {
+  for (const read of earlierSources()) {
     try {
       const meta = JSON.parse(new TextDecoder().decode(await read('meta.json')));
       if (meta.prints?.version !== PRINT_SPEC.version) continue;
@@ -294,19 +295,97 @@ async function buildPrints(catalog) {
   return words;
 }
 
-async function write(catalog, prints) {
+/** Reads a file from an earlier build: this machine's output folder first, then the published site. */
+const earlierSources = () => [
+  async (file) => readFile(path.join(OUT_DIR, file)),
+  ...(FALLBACK_URL ? [async (file) => getBytes(`${FALLBACK_URL.replace(/\/$/, '')}/${file}`)] : []),
+];
+
+/** Prices from an earlier build: { updated, byId: card id → { usd, eur } }, or null. */
+async function previousPrices() {
+  for (const read of earlierSources()) {
+    try {
+      const prices = JSON.parse(new TextDecoder().decode(await read('prices.json')));
+      const catalog = JSON.parse(new TextDecoder().decode(await read('catalog.json')));
+      if (prices.version !== 1 || prices.usd.length !== catalog.cards.length) continue;
+      const byId = new Map(catalog.cards.map((row, i) => [row[0], { usd: prices.usd[i], eur: prices.eur[i] }]));
+      return { updated: prices.updated, byId };
+    } catch {
+      // nothing usable there; try the next source
+    }
+  }
+  return null;
+}
+
+/**
+ * The market price of one raw copy of every card's standard printing (TCGplayer USD, else
+ * Cardmarket EUR), in catalog order: what set values add up. TCGdex only has prices per card, so
+ * a full refresh is one small request per card; it's skipped while the last one is recent.
+ */
+async function buildPrices(catalog) {
+  const earlier = await previousPrices();
+  const recent = earlier && Date.now() - Date.parse(earlier.updated) < PRICES_MAX_AGE_DAYS * 86_400_000;
+  const n = catalog.cards.length;
+  const usd = new Array(n).fill(null);
+  const eur = new Array(n).fill(null);
+  const todo = [];
+  catalog.cards.forEach((row, i) => {
+    const old = earlier?.byId.get(row[0]);
+    if (old) {
+      usd[i] = old.usd;
+      eur[i] = old.eur;
+    }
+    if (!recent || !old) todo.push(i);
+  });
+  console.log(`Fetching market prices for ${todo.length} cards${recent ? ` (the rest are from ${earlier.updated.slice(0, 10)})` : ''}…`);
+  const now = new Date().toISOString();
+  let failedInARow = 0;
+  let failed = 0;
+  let done = 0;
+  await pool(todo, 8, async (i) => {
+    if (failedInARow > 30) return; // TCGdex is struggling: keep the earlier prices
+    const id = catalog.cards[i][0];
+    try {
+      const res = await fetch(`${API}/cards/${encodeURIComponent(id)}`, {
+        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.status === 404) return;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const raw = await res.json();
+      const p = standardPrice(raw.variants, extractPrices(raw, now));
+      usd[i] = p?.currency === 'USD' ? p.amount : null;
+      eur[i] = p?.currency === 'EUR' ? p.amount : null;
+      failedInARow = 0;
+    } catch {
+      failed++;
+      failedInARow++;
+    }
+    if (++done % 4000 === 0) console.log(`  ${done}/${todo.length}`);
+  });
+  if (failedInARow > 30) console.log('  TCGdex stopped answering; kept the earlier prices for the rest');
+  else if (failed) console.log(`  ${failed} cards' prices couldn't be fetched (kept their earlier price, if any)`);
+  const priced = usd.filter((v, i) => v !== null || eur[i] !== null).length;
+  console.log(`  ${priced} of ${n} cards have a market price`);
+  return { version: 1, updated: recent && !todo.length ? earlier.updated : now, usd, eur };
+}
+
+async function write(catalog, prints, prices) {
   await mkdir(OUT_DIR, { recursive: true });
   const json = JSON.stringify(catalog);
   const hash = createHash('sha256').update(json).digest('hex').slice(0, 12);
   await writeFile(path.join(OUT_DIR, 'catalog.json'), json);
   const printBytes = new Uint8Array(prints.buffer, prints.byteOffset, prints.byteLength);
   await writeFile(path.join(OUT_DIR, 'prints.bin'), printBytes);
+  const pricesJson = JSON.stringify(prices);
+  await writeFile(path.join(OUT_DIR, 'prices.json'), pricesJson);
   const meta = {
     version: catalog.version,
     hash,
     builtAt: catalog.builtAt,
     counts: { sets: catalog.sets.length, cards: catalog.cards.length, artists: catalog.artists.length },
     prints: { version: PRINT_SPEC.version, words: PRINT_WORDS, hash: createHash('sha256').update(printBytes).digest('hex').slice(0, 12) },
+    prices: { version: prices.version, updated: prices.updated, hash: createHash('sha256').update(pricesJson).digest('hex').slice(0, 12) },
   };
   await writeFile(path.join(OUT_DIR, 'meta.json'), JSON.stringify(meta, null, 2));
   console.log(`Wrote ${OUT_DIR} (${(json.length / 1024 / 1024).toFixed(2)} MB, hash ${hash})`);
@@ -328,7 +407,7 @@ async function main() {
     catalog = await getJSON(`${FALLBACK_URL.replace(/\/$/, '')}/catalog.json`);
     if (!catalog?.cards?.length) throw err;
   }
-  await write(catalog, await buildPrints(catalog));
+  await write(catalog, await buildPrints(catalog), await buildPrices(catalog));
 }
 
 const t0 = Date.now();

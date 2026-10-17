@@ -6,11 +6,23 @@ import { PrintIndex } from './pictures.ts';
 interface Meta {
   hash?: string;
   prints?: { version: number; words: number; hash: string };
+  prices?: { version: number; updated: string; hash: string };
+}
+
+/**
+ * Market price of one raw copy of each card's standard printing, in catalog order: TCGplayer's in
+ * USD, or (for cards TCGplayer doesn't list) Cardmarket's in EUR. Refreshed with the catalog.
+ */
+export interface MarketPrices {
+  updated: string;
+  usd: (number | null)[];
+  eur: (number | null)[];
 }
 
 let metaPromise: Promise<Meta> | null = null;
 let promise: Promise<Catalog> | null = null;
 let printsPromise: Promise<PrintIndex | null> | null = null;
+let pricesPromise: Promise<MarketPrices | null> | null = null;
 
 function loadMeta(): Promise<Meta> {
   metaPromise ??= fetch('./catalog/meta.json', { cache: 'no-cache' })
@@ -50,6 +62,35 @@ export function loadPrintIndex(): Promise<PrintIndex | null> {
     return null;
   });
   return printsPromise;
+}
+
+/** Every card's market price (for set values), or null when the catalog was built without them. */
+export function loadMarketPrices(): Promise<MarketPrices | null> {
+  pricesPromise ??= (async () => {
+    const [meta, catalog] = await Promise.all([loadMeta(), loadCatalog()]);
+    const p = meta.prices;
+    if (!p || p.version !== 1) return null;
+    const res = await fetch(`./catalog/prices.json?v=${p.hash}`);
+    if (!res.ok) return null;
+    const prices = (await res.json()) as MarketPrices;
+    return prices.usd?.length === catalog.cards.length ? prices : null;
+  })().catch(() => {
+    pricesPromise = null;
+    return null;
+  });
+  return pricesPromise;
+}
+
+export function useMarketPrices(): MarketPrices | null {
+  const [prices, setPrices] = useState<MarketPrices | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void loadMarketPrices().then((p) => alive && setPrices(p));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return prices;
 }
 
 export function useCatalog(): { catalog: Catalog | null; error: string | null } {

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { hasRole } from '../../shared/types.ts';
-import { IconBrush, IconCards, IconPlus, IconShield, IconUser } from './components/Icons.tsx';
+import { IconBrush, IconCards, IconPlus, IconSets, IconShield, IconUser } from './components/Icons.tsx';
 import { CollectionProvider } from './lib/collection.tsx';
 import { CurrencyProvider } from './lib/currency.tsx';
 import { href, useRoute } from './lib/router.ts';
@@ -97,7 +97,8 @@ function Shell() {
       </header>
       <main>{page}</main>
       <nav className="tabbar" aria-label="Main">
-        {tab('#/', 'Collection', <IconCards />, !section || section === 'item' || section === 'sets' || section === 'set')}
+        {tab('#/', 'Collection', <IconCards />, !section || section === 'item')}
+        {tab('#/sets', 'Sets', <IconSets />, section === 'sets' || section === 'set')}
         {canEdit && tab(href('add', 'scan'), 'Add', <IconPlus />, section === 'add' || section === 'card')}
         {tab('#/artists', 'Artists', <IconBrush />, section === 'artists' || section === 'artist')}
         {isAdmin && tab('#/admin', 'Admin', <IconShield />, section === 'admin')}

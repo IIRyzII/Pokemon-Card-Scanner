@@ -2,7 +2,7 @@
 // TCGdex aggregates TCGplayer (USD) and Cardmarket (EUR) prices per printing.
 
 import { VARIANTS, isVariant } from '../../shared/grading.ts';
-import type { CardInfo, PriceRow } from '../../shared/types.ts';
+import type { CardInfo } from '../../shared/types.ts';
 import { HttpError, type Env } from './env.ts';
 
 const DEFAULT_API = 'https://api.tcgdex.net/v2/en';
@@ -88,50 +88,5 @@ export function normalizeCard(raw: TcgdexCard, set: TcgdexSetInfo | null): CardI
   };
 }
 
-/** TCGplayer's printing names → our variant keys. */
-export function tcgplayerVariant(key: string): string {
-  const k = key.toLowerCase();
-  if (k.includes('1st')) return 'firstEdition';
-  if (k.includes('reverse')) return 'reverse';
-  if (k.includes('holo')) return 'holo';
-  if (k.includes('normal')) return 'normal';
-  return k;
-}
-
-const price = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null);
-
-export function extractPrices(raw: TcgdexCard, now: string): PriceRow[] {
-  const rows: PriceRow[] = [];
-  const tcg = raw.pricing?.tcgplayer;
-  if (tcg && typeof tcg === 'object') {
-    const updated = typeof tcg.updated === 'string' ? tcg.updated : now;
-    for (const [key, value] of Object.entries(tcg)) {
-      if (key === 'unit' || key === 'updated' || !value || typeof value !== 'object') continue;
-      const v = value as Record<string, unknown>;
-      const row: PriceRow = {
-        source: 'tcgplayer',
-        variant: tcgplayerVariant(key),
-        gradeKey: 'ungraded',
-        market: price(v.marketPrice),
-        low: price(v.lowPrice),
-        mid: price(v.midPrice),
-        high: price(v.highPrice),
-        currency: 'USD',
-        label: key,
-        url: typeof v.productId === 'number' ? `https://www.tcgplayer.com/product/${v.productId}` : null,
-        updatedAt: updated,
-      };
-      if (row.market ?? row.low ?? row.mid ?? row.high) rows.push(row);
-    }
-  }
-  const cm = raw.pricing?.cardmarket;
-  if (cm && typeof cm === 'object') {
-    const updated = typeof cm.updated === 'string' ? cm.updated : now;
-    const base = { source: 'cardmarket' as const, gradeKey: 'ungraded', high: null, currency: 'EUR', url: null, updatedAt: updated };
-    const main = { market: price(cm.trend), low: price(cm.low), mid: price(cm.avg30) };
-    const holo = { market: price(cm['trend-holo']), low: price(cm['low-holo']), mid: price(cm['avg30-holo']) };
-    if (main.market ?? main.mid) rows.push({ ...base, ...main, variant: 'main', label: 'Cardmarket' });
-    if (holo.market ?? holo.mid) rows.push({ ...base, ...holo, variant: 'holo', label: 'Cardmarket (holo / reverse)' });
-  }
-  return rows;
-}
+// Price extraction is shared with the catalog builder (set values).
+export { extractPrices, tcgplayerVariant } from '../../shared/market.ts';
