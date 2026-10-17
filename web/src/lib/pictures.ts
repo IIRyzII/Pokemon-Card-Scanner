@@ -18,6 +18,8 @@ export const CLOSE = Math.round(70 * scale);
 export const CLEAR = Math.round(20 * scale);
 /** Other printings of the same card within this much of the best look alike (reprints): the number decides. */
 export const TWIN = Math.round(40 * scale);
+/** A clear match this close is certain from a single look; others must come up twice in a row. */
+export const CERTAIN = Math.round(40 * scale);
 /** Beyond this, the picture is clearly a different card. */
 export const UNLIKE = Math.round(100 * scale);
 

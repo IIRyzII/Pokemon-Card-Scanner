@@ -26,6 +26,29 @@ const NOTHING_READ: ScanGuess = { names: [], number: null, total: null, setCode:
 
 const printOf = (img: Rgba) => cardPrint({ data: img.data, width: img.width, height: img.height, channels: 4 });
 
+/** What a straightened card's picture matches, trying it both ways up. */
+export function matchPicture(index: PrintIndex, card: Rgba): { matches: PictureMatch[]; flipped: boolean; picture: PictureVerdict | null } {
+  const { matches, flipped } = nearestEitherWay(index, printOf(card), printOf(rotate180(card)));
+  return { matches, flipped, picture: pictureVerdict(matches) };
+}
+
+/**
+ * A reading the picture settles on its own (one clear match, no reprints that look alike).
+ * `image`: the straightened card, the right way up.
+ */
+export function readingFromPicture(catalog: Catalog, pictures: PictureMatch[], picture: PictureVerdict, image: HTMLCanvasElement): Reading {
+  // Rank other printings of the same card next, in case it's one of those.
+  const sameName = { ...NOTHING_READ, names: [picture.best.card.name] };
+  const candidates = identifyCard(catalog, sameName, 12, pictures);
+  const confidence = matchConfidence(sameName, candidates, picture);
+  // Nothing was read, so say what really matched.
+  const best = picture.best.card;
+  for (const c of candidates) {
+    c.why = c.card.id === best.id ? ['picture'] : c.why.map((w) => (w === 'name' ? (c.card.nameKey === best.nameKey ? 'same name' : 'similar name') : w));
+  }
+  return { image, pictures, picture, ocr: null, candidates, confidence };
+}
+
 export interface ReadOptions extends Pick<ScanOptions, 'signal' | 'onProgress'> {
   catalog: Catalog;
   index: PrintIndex | null;
@@ -40,26 +63,16 @@ export async function readCard({ catalog, index, card, quick, signal, onProgress
   let pictures: PictureMatch[] | null = null;
   let picture: PictureVerdict | null = null;
   if (index && !(card instanceof HTMLCanvasElement)) {
-    const { matches, flipped } = nearestEitherWay(index, printOf(card.rgba), printOf(rotate180(card.rgba)));
-    pictures = matches;
-    picture = pictureVerdict(matches);
+    const match = matchPicture(index, card.rgba);
+    const flipped = match.flipped;
+    pictures = match.matches;
+    picture = match.picture;
     if (flipped) {
       // The card was upside down: turn it the right way up before reading its text.
       releaseCanvas(image);
       image = toCanvas(rotate180(card.rgba));
     }
-    if (picture?.clear && !picture.twins.length) {
-      // The picture settles it. Rank other printings of the same card next, in case it's one of those.
-      const sameName = { ...NOTHING_READ, names: [picture.best.card.name] };
-      const candidates = identifyCard(catalog, sameName, 12, pictures);
-      const confidence = matchConfidence(sameName, candidates, picture);
-      // Nothing was read, so say what really matched.
-      const best = picture.best.card;
-      for (const c of candidates) {
-        c.why = c.card.id === best.id ? ['picture'] : c.why.map((w) => (w === 'name' ? (c.card.nameKey === best.nameKey ? 'same name' : 'similar name') : w));
-      }
-      return { image, pictures, picture, ocr: null, candidates, confidence };
-    }
+    if (picture?.clear && !picture.twins.length) return readingFromPicture(catalog, pictures, picture, image);
   }
   const ocr = await scanCard(image, { quick, signal, onProgress });
   const candidates = identifyCard(catalog, ocr.guess, 12, pictures);

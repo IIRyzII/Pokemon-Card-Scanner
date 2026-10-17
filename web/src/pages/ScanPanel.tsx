@@ -70,7 +70,7 @@ function statusText(auto: boolean, status: AutoStatus | null): string {
     case 'seen':
       return `Reading ${status.text}…`;
     case 'checking':
-      return `Looks like ${status.name}. Reading the number to tell which set it's from…`;
+      return `Looks like ${status.name}. Hold it still a moment so the number can be read to tell which set it's from…`;
     case 'repeat':
       return `Already found ${status.name}. Show the next card, or press the button to read this one again.`;
     case 'failed':

@@ -17,6 +17,13 @@ export interface Straightened {
   canvas: HTMLCanvasElement;
 }
 
+/** A card found in a frame, plus the small copy of the frame it was found in. */
+export interface Located extends Detection {
+  small: ImageData;
+  /** The corners in `small` */
+  smallCorners: Corners;
+}
+
 /** The part of the camera frame the <video> element actually shows (object-fit: cover), in video pixels. */
 export function visibleRegion(video: HTMLVideoElement): Region {
   const vw = video.videoWidth;
@@ -39,7 +46,7 @@ const SEARCH_HEIGHT = 400; // the finder works on a copy this many pixels tall
 let small: HTMLCanvasElement | null = null;
 
 /** Looks for a card in `region` of an image or video frame. Corners are in the source's pixels. */
-export function findCard(source: CanvasImageSource, region: Region): Detection | null {
+export function findCard(source: CanvasImageSource, region: Region): Located | null {
   const scale = SEARCH_HEIGHT / region.h;
   const w = Math.max(1, Math.round(region.w * scale));
   small ??= document.createElement('canvas');
@@ -49,14 +56,26 @@ export function findCard(source: CanvasImageSource, region: Region): Detection |
   }
   const ctx = small.getContext('2d', { willReadFrequently: true })!;
   ctx.drawImage(source, region.x, region.y, region.w, region.h, 0, 0, w, SEARCH_HEIGHT);
-  const found = detectCard(ctx.getImageData(0, 0, w, SEARCH_HEIGHT));
+  const pixels = ctx.getImageData(0, 0, w, SEARCH_HEIGHT);
+  const found = detectCard(pixels);
   if (!found) return null;
   const corners = found.corners.map((p) => ({ x: region.x + p.x / scale, y: region.y + p.y / scale })) as Corners;
-  return { corners, score: found.score };
+  return { corners, score: found.score, small: pixels, smallCorners: found.corners };
+}
+
+/**
+ * A straightened copy of the card cut from the small image it was found in. Plenty for its picture
+ * fingerprint (which only uses the broad shapes), and cheap enough to do on every look.
+ */
+export function smallCard(found: Located): Rgba {
+  const c = found.smallCorners;
+  const height = (Math.hypot(c[0].x - c[3].x, c[0].y - c[3].y) + Math.hypot(c[1].x - c[2].x, c[1].y - c[2].y)) / 2;
+  const h = Math.max(48, Math.round(height));
+  return warpCard({ data: found.small.data, width: found.small.width, height: found.small.height }, c, Math.round(h * CARD_ASPECT), h);
 }
 
 /** Looks for the card in what the camera shows right now. Corners are in video pixels. */
-export function locateCard(video: HTMLVideoElement): Detection | null {
+export function locateCard(video: HTMLVideoElement): Located | null {
   return video.videoWidth ? findCard(video, visibleRegion(video)) : null;
 }
 

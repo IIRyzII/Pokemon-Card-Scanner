@@ -1,16 +1,19 @@
-// Auto-scan: while the camera is live, keep finding the card (and outline it on screen); once it's
-// held steady, recognise it — by its picture, and by its text when the picture can't settle it —
-// and pick it as soon as that's certain, without waiting for the shutter button.
+// Auto-scan: while the camera is live, keep finding the card (and outline it on screen) and
+// recognise it by its picture on every look — a little movement or blur doesn't matter for that —
+// reading its text when the picture can't settle it, and pick it as soon as that's certain,
+// without waiting for the shutter button.
 
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { Catalog } from '../lib/catalog.ts';
 import { nameMatch, type ScanGuess } from '../lib/match.ts';
+import { CERTAIN } from '../lib/pictures.ts';
 import { loadPrintIndex } from '../lib/useCatalog.ts';
 import type { Corners, Point } from './detect.ts';
-import { cornerShift, locateCard, straightenCard, toElement } from './locate.ts';
+import { cornerShift, locateCard, smallCard, straightenCard, toCanvas, toElement } from './locate.ts';
 import { frameChange, snapshot } from './motion.ts';
 import { captureFrame, frameCrop, releaseCanvas, warmUpOcr } from './ocr.ts';
-import { readCard, type Reading } from './recognize.ts';
+import { matchPicture, readCard, readingFromPicture, type Reading } from './recognize.ts';
+import { rotate180 } from './warp.ts';
 
 export type AutoStatus =
   | { state: 'loading' }
@@ -29,10 +32,10 @@ export interface Outline {
   steady: boolean;
 }
 
-const TICK_MS = 150; // pause between looks (finding the card takes a few tens of ms more)
-const STEADY = 0.02; // corners moving less than this share of the card's height = held steady
+const TICK_MS = 80; // pause between looks (finding and matching the card takes a few tens of ms more)
+const STILL_ENOUGH = 0.05; // corners moving less than this share of the card's height: sharp enough to read text
 const MOVED = 0.08; // …and more than this = the card was moved (or swapped)
-const STEADY_LOOKS = 2; // steady looks in a row before reading
+const STEADY_LOOKS = 2; // without an outline: steady looks in a row before reading the guide frame
 const SETTLE_MS = 1500; // focus and exposure shift while the camera starts; that isn't the card moving
 const MOVING_SNAPSHOT = 12; // without an outline: frame change above this = moving
 
@@ -104,6 +107,8 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
       let paused = false; // re-found the last card: wait for it to move before reading again
       let restUntil = 0;
       let misses = 0; // reads in a row that found nothing, to slow down when there's no card
+      let streakId: string | null = null; // the card the last look's picture clearly matched…
+      let streak = 0; // …and how many looks in a row it has
 
       while (!signal.aborted) {
         await wait(TICK_MS);
@@ -112,29 +117,54 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
         if (signal.aborted || !v || !f || !v.videoWidth || document.hidden) continue;
 
         const detection = locateCard(v);
-        let card: Parameters<typeof readCard>[0]['card'];
+        let card: Parameters<typeof readCard>[0]['card'] | null = null;
+        let reading: Reading | null = null;
         if (detection) {
+          snap = null;
           const shift = corners ? cornerShift(corners, detection.corners) : 1;
           corners = detection.corners;
-          snap = null;
-          const isSteady = shift < STEADY;
-          setOutline({ points: detection.corners.map((p) => toElement(v, p)), steady: isSteady });
-          if (!isSteady) {
-            steady = 0;
-            restUntil = 0;
-            if (shift > MOVED) {
-              paused = false;
-              misses = 0;
-              if (performance.now() - started > SETTLE_MS) moved = true;
-            }
-            show({ state: 'moving' });
-            continue;
+          const still = shift < STILL_ENOUGH;
+          setOutline({ points: detection.corners.map((p) => toElement(v, p)), steady: still });
+          if (shift > MOVED) {
+            paused = false;
+            misses = 0;
+            if (performance.now() - started > SETTLE_MS) moved = true;
           }
-          if (++steady < STEADY_LOOKS || paused || performance.now() < restUntil) continue;
-          card = straightenCard(v, v.videoWidth, v.videoHeight, detection.corners);
+          if (paused) continue;
+          // The text needs a sharp frame; the picture doesn't (it only uses the card's broad shapes).
+          let readNow = still && performance.now() >= restUntil;
+          if (index) {
+            const small = smallCard(detection);
+            const { matches, flipped, picture } = matchPicture(index, small);
+            if (picture?.clear && !picture.twins.length) {
+              // One card: certain at once if the match is very close, else once it comes up twice running.
+              streak = picture.best.card.id === streakId ? streak + 1 : 1;
+              streakId = picture.best.card.id;
+              if ((picture.best.distance > CERTAIN && streak < 2) || performance.now() < restUntil) {
+                show({ state: 'seen', text: picture.best.card.name });
+                continue;
+              }
+              // Settled by the picture we just matched. (Grabbing a fresh frame now could catch the card
+              // somewhere else if it's moving.)
+              reading = readingFromPicture(catalog, matches, picture, toCanvas(flipped ? rotate180(small) : small));
+            } else {
+              streak = 0;
+              streakId = null;
+              if (picture?.clear) show({ state: 'checking', name: picture.best.card.name }); // a reprint: the number decides
+              else if (!still) show({ state: 'moving' });
+            }
+          } else if (!still) {
+            show({ state: 'moving' });
+          }
+          if (!reading) {
+            if (!readNow) continue;
+            card = straightenCard(v, v.videoWidth, v.videoHeight, detection.corners);
+          }
         } else {
           // No outline (e.g. a white card on a white table): read the guide frame once the view is steady.
           corners = null;
+          streak = 0;
+          streakId = null;
           setOutline(null);
           const now = snapshot(v, frameCrop(v, f));
           const change = snap ? frameChange(snap, now) : 0;
@@ -151,15 +181,17 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
           card = captureFrame(v, f);
         }
 
-        let reading: Reading;
-        try {
-          reading = await readCard({ catalog, index, card, quick: true, signal });
-        } catch {
-          releaseCanvas(card instanceof HTMLCanvasElement ? card : card.canvas);
-          if (signal.aborted) return;
-          restUntil = performance.now() + 1000;
-          continue;
+        if (!reading && card) {
+          try {
+            reading = await readCard({ catalog, index, card, quick: true, signal });
+          } catch {
+            releaseCanvas(card instanceof HTMLCanvasElement ? card : card.canvas);
+            if (signal.aborted) return;
+            restUntil = performance.now() + 1000;
+            continue;
+          }
         }
+        if (!reading) continue;
         if (signal.aborted) return releaseCanvas(reading.image);
         const top = reading.candidates[0];
         if (reading.confidence === 'sure') {
