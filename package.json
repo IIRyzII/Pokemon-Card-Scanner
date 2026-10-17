@@ -7,7 +7,7 @@
     "api"
   ],
   "scripts": {
-    "catalog": "node scripts/build-catalog.mjs",
+    "catalog": "node --experimental-strip-types scripts/build-catalog.mjs",
     "dev:web": "npm run dev --workspace web",
     "dev:api": "npm run dev --workspace api",
     "build": "npm run build --workspace web",
@@ -16,5 +16,8 @@
   },
   "engines": {
     "node": ">=22.12"
+  },
+  "devDependencies": {
+    "jpeg-js": "^0.4.4"
   }
 }

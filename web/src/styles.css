@@ -1169,6 +1169,40 @@ button.tile.as-button {
     display: none;
   }
 }
+/* The card the scanner found, outlined wherever it's held; green once it's steady. */
+.card-outline {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.card-outline polygon {
+  fill: rgba(255, 255, 255, 0.06);
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+.card-outline.steady polygon {
+  fill: rgba(52, 211, 153, 0.12);
+  stroke: #34d399;
+}
+.viewfinder.has-card .frame {
+  border-color: transparent;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.15);
+}
+.viewfinder.has-card .zone,
+.viewfinder.has-card .frame::after {
+  opacity: 0;
+}
+.frame,
+.zone {
+  transition:
+    opacity 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
 .zone {
   position: absolute;
   left: 0;
@@ -1400,6 +1434,115 @@ button.tile.as-button {
 .artist-name {
   font-weight: 600;
   margin-right: auto;
+}
+
+/* ---------- sets ---------- */
+
+.progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+.progress.done > span {
+  background: var(--green);
+}
+.set-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.set-series {
+  margin: 20px 0 2px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.set-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.set-row:hover {
+  text-decoration: none;
+  background: var(--surface);
+}
+.set-logo {
+  display: grid;
+  place-items: center;
+  height: 36px;
+}
+.set-code {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--faint);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.set-logo img {
+  max-width: 64px;
+  max-height: 36px;
+  object-fit: contain;
+}
+.set-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.set-info .progress {
+  margin-top: 4px;
+}
+.set-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.set-count {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.set-count .done {
+  color: var(--green);
+  font-weight: 700;
+}
+.set-head-logo {
+  display: block;
+  max-width: 220px;
+  max-height: 80px;
+  object-fit: contain;
+  margin: 4px 0 8px;
+}
+.set-progress-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.value-box .progress + p {
+  margin: 8px 0 0;
+}
+/* Cards you don't have yet, greyed out like empty binder pockets. */
+.binder .tile:not(.owned) .card-img {
+  opacity: 0.35;
+  filter: grayscale(1);
 }
 
 /* ---------- admin / account ---------- */

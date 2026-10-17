@@ -41,6 +41,7 @@ export function CardPage({ cardId }: { cardId: string }) {
   const card = detail?.card;
   const name = card?.name ?? fromCatalog?.name ?? 'Card';
   const setName = card?.setName ?? fromCatalog?.set.name ?? '';
+  const setId = card?.setId ?? fromCatalog?.set.id;
   const number = card ? cardNumberText(card.number, card.setTotal) : fromCatalog ? cardNumberText(fromCatalog.number, fromCatalog.set.official) : '';
   const artist = canonicalArtist(catalog, card?.artist ?? fromCatalog?.artist);
   const image = card?.image ?? fromCatalog?.image ?? null;
@@ -64,7 +65,7 @@ export function CardPage({ cardId }: { cardId: string }) {
         <div className="hero-info">
           <h1>{name}</h1>
           <p className="muted">
-            {setName}
+            {setId ? <a href={href('set', setId)}>{setName}</a> : setName}
             {number && ` · #${number}`}
             {(card?.rarity ?? fromCatalog?.rarity) && ` · ${card?.rarity ?? fromCatalog?.rarity}`}
           </p>

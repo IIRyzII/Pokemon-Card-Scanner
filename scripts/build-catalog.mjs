@@ -4,14 +4,20 @@
 // The web app searches and identifies scanned cards against this file, so it
 // never depends on a third-party API at runtime.
 //
-// Usage: node scripts/build-catalog.mjs [--out web/public/catalog] [--if-missing] [--fallback-url https://you.github.io/repo/catalog]
+// It also fingerprints every card's picture (prints.bin) so the scanner can recognise a card by
+// how it looks. Prints already published are reused, so only new cards' pictures are downloaded.
+//
+// Usage: node --experimental-strip-types scripts/build-catalog.mjs [--out web/public/catalog] [--if-missing] [--fallback-url https://you.github.io/repo/catalog]
 //   --if-missing:   do nothing when a catalog already exists (used by `npm run dev`).
-//   --fallback-url: if TCGdex is unreachable, copy the previously published catalog instead of failing.
+//   --fallback-url: the published catalog: prints are reused from it, and if TCGdex is unreachable
+//                   the whole catalog is copied from it instead of failing.
 
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import jpeg from 'jpeg-js';
+import { cardPrint, PRINT_SPEC, PRINT_WORDS } from '../shared/cardprint.ts';
 
 const API = 'https://api.tcgdex.net/v2/en';
 const GQL = 'https://api.tcgdex.net/v2/graphql';
@@ -45,6 +51,20 @@ async function getJSON(url, init = {}, attempt = 1) {
     if (attempt >= 5) throw err;
     await sleep(500 * 2 ** attempt);
     return getJSON(url, init, attempt + 1);
+  }
+}
+
+/** Raw bytes of a URL, or null if it doesn't exist. */
+async function getBytes(url, attempt = 1) {
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(60_000) });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    return new Uint8Array(await res.arrayBuffer());
+  } catch (err) {
+    if (attempt >= 4) throw err;
+    await sleep(500 * 2 ** attempt);
+    return getBytes(url, attempt + 1);
   }
 }
 
@@ -220,16 +240,73 @@ async function build() {
   return catalog;
 }
 
-async function write(catalog) {
+/** Prints from an earlier build ({ version, byId: card id → print }), from disk or the published site. */
+async function previousPrints() {
+  const sources = [
+    async (file) => readFile(path.join(OUT_DIR, file)),
+    ...(FALLBACK_URL ? [async (file) => getBytes(`${FALLBACK_URL.replace(/\/$/, '')}/${file}`)] : []),
+  ];
+  for (const read of sources) {
+    try {
+      const meta = JSON.parse(new TextDecoder().decode(await read('meta.json')));
+      if (meta.prints?.version !== PRINT_SPEC.version) continue;
+      const catalog = JSON.parse(new TextDecoder().decode(await read('catalog.json')));
+      const bytes = await read('prints.bin');
+      if (!bytes || bytes.length !== catalog.cards.length * PRINT_WORDS * 4) continue;
+      const words = new Uint32Array(new Uint8Array(bytes).buffer);
+      const byId = new Map(catalog.cards.map((row, i) => [row[0], words.subarray(i * PRINT_WORDS, (i + 1) * PRINT_WORDS)]));
+      return byId;
+    } catch {
+      // nothing usable there; try the next source
+    }
+  }
+  return new Map();
+}
+
+/** A print for every card with a picture, in catalog order (all zeros = no picture). */
+async function buildPrints(catalog) {
+  const reuse = await previousPrints();
+  const words = new Uint32Array(catalog.cards.length * PRINT_WORDS);
+  const todo = [];
+  catalog.cards.forEach((row, i) => {
+    if (!row[7]) return;
+    const old = reuse.get(row[0]);
+    if (old && old.some((w) => w !== 0)) words.set(old, i * PRINT_WORDS);
+    else todo.push(i);
+  });
+  console.log(`Fingerprinting ${todo.length} card pictures (${catalog.cards.length - todo.length} reused or without a picture)…`);
+  let failed = 0;
+  let done = 0;
+  await pool(todo, 8, async (i) => {
+    const [, , number, setIdx] = catalog.cards[i];
+    const set = catalog.sets[setIdx];
+    try {
+      const bytes = await getBytes(`${catalog.imageBase}/${set.serie}/${set.id}/${number}/low.jpg`);
+      if (!bytes) throw new Error('no picture');
+      const img = jpeg.decode(bytes, { useTArray: true, formatAsRGBA: true, maxMemoryUsageInMB: 64 });
+      words.set(cardPrint({ data: img.data, width: img.width, height: img.height, channels: 4 }), i * PRINT_WORDS);
+    } catch {
+      failed++;
+    }
+    if (++done % 2000 === 0) console.log(`  ${done}/${todo.length}`);
+  });
+  if (failed) console.log(`  ${failed} pictures couldn't be read (those cards are still found by their text)`);
+  return words;
+}
+
+async function write(catalog, prints) {
   await mkdir(OUT_DIR, { recursive: true });
   const json = JSON.stringify(catalog);
   const hash = createHash('sha256').update(json).digest('hex').slice(0, 12);
   await writeFile(path.join(OUT_DIR, 'catalog.json'), json);
+  const printBytes = new Uint8Array(prints.buffer, prints.byteOffset, prints.byteLength);
+  await writeFile(path.join(OUT_DIR, 'prints.bin'), printBytes);
   const meta = {
     version: catalog.version,
     hash,
     builtAt: catalog.builtAt,
     counts: { sets: catalog.sets.length, cards: catalog.cards.length, artists: catalog.artists.length },
+    prints: { version: PRINT_SPEC.version, words: PRINT_WORDS, hash: createHash('sha256').update(printBytes).digest('hex').slice(0, 12) },
   };
   await writeFile(path.join(OUT_DIR, 'meta.json'), JSON.stringify(meta, null, 2));
   console.log(`Wrote ${OUT_DIR} (${(json.length / 1024 / 1024).toFixed(2)} MB, hash ${hash})`);
@@ -241,18 +318,17 @@ async function main() {
     console.log(`Catalog already exists in ${OUT_DIR} (run "npm run catalog" to rebuild)`);
     return;
   }
+  let catalog;
   try {
-    const catalog = await build();
+    catalog = await build();
     if (catalog.cards.length < 1000) throw new Error(`Only ${catalog.cards.length} cards — refusing to publish a partial catalog`);
-    await write(catalog);
   } catch (err) {
     if (!FALLBACK_URL) throw err;
     console.warn(`Catalog build failed (${err.message}); reusing the published catalog from ${FALLBACK_URL}`);
-    const base = FALLBACK_URL.replace(/\/$/, '');
-    const previous = await getJSON(`${base}/catalog.json`);
-    if (!previous?.cards?.length) throw err;
-    await write(previous);
+    catalog = await getJSON(`${FALLBACK_URL.replace(/\/$/, '')}/catalog.json`);
+    if (!catalog?.cards?.length) throw err;
   }
+  await write(catalog, await buildPrints(catalog));
 }
 
 const t0 = Date.now();

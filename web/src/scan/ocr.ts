@@ -206,26 +206,34 @@ export function captureFrame(video: HTMLVideoElement, frame: HTMLElement): HTMLC
   return canvas;
 }
 
-/** Loads a photo and center-crops it to card proportions (works best when the card fills the photo). */
-export async function photoToCard(file: Blob): Promise<HTMLCanvasElement> {
+/** Loads a photo into a canvas, no more than 2000px on its longer side. */
+export async function loadPhoto(file: Blob): Promise<HTMLCanvasElement> {
   const bitmap = await createImageBitmap(file);
-  let { width: w, height: h } = bitmap;
+  const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas;
+}
+
+/** The middle of a photo, cut to card proportions: for when the card itself can't be found in it. */
+export function centerCrop(photo: HTMLCanvasElement): HTMLCanvasElement {
+  let w = photo.width;
+  let h = photo.height;
   let sx = 0;
   let sy = 0;
   if (w / h > CARD_RATIO) {
-    const nw = h * CARD_RATIO;
-    sx = (w - nw) / 2;
-    w = nw;
+    sx = (w - h * CARD_RATIO) / 2;
+    w = h * CARD_RATIO;
   } else {
-    const nh = w / CARD_RATIO;
-    sy = (h - nh) / 2;
-    h = nh;
+    sy = (h - w / CARD_RATIO) / 2;
+    h = w / CARD_RATIO;
   }
-  const scale = Math.min(1, 1800 / h);
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(w * scale);
-  canvas.height = Math.round(h * scale);
-  canvas.getContext('2d')!.drawImage(bitmap, sx, sy, w, h, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
+  canvas.width = Math.round(w);
+  canvas.height = Math.round(h);
+  canvas.getContext('2d')!.drawImage(photo, sx, sy, w, h, 0, 0, canvas.width, canvas.height);
   return canvas;
 }

@@ -38,7 +38,7 @@ jobs:
       - run: npm ci
       - name: Build our card catalog from the open TCGdex data
         run: >
-          node scripts/build-catalog.mjs --out web/public/catalog
+          node --experimental-strip-types scripts/build-catalog.mjs --out web/public/catalog
           --fallback-url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/catalog"
       - name: Unit tests
         run: npm test

@@ -1,15 +1,17 @@
-// Camera scanner: line the card up in the frame and auto-scan finds it (or tap the shutter), then pick the match.
+// Camera scanner: show a card to the camera and auto-scan finds it (or tap the shutter), then pick the match.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cardNumberText } from '../../../shared/links.ts';
 import { CardImage } from '../components/CardImage.tsx';
 import { IconCamera, IconImage } from '../components/Icons.tsx';
-import { identifyCard, matchConfidence, type Candidate, type Confidence, type ScanGuess } from '../lib/match.ts';
+import type { Candidate, Confidence, ScanGuess } from '../lib/match.ts';
 import { ownedCount, useCollection } from '../lib/collection.tsx';
 import { href, navigate } from '../lib/router.ts';
-import { useCatalog } from '../lib/useCatalog.ts';
-import { captureFrame, photoToCard, releaseCanvas, scanCard, warmUpOcr, type ScanResult } from '../scan/ocr.ts';
-import { markFound, useAutoScan, type AutoFound, type AutoStatus } from '../scan/useAutoScan.ts';
+import { loadPrintIndex, useCatalog } from '../lib/useCatalog.ts';
+import { findCard, locateCard, straightenCard, type Straightened } from '../scan/locate.ts';
+import { captureFrame, centerCrop, loadPhoto, releaseCanvas, warmUpOcr, type ScanResult } from '../scan/ocr.ts';
+import { readCard, type Reading } from '../scan/recognize.ts';
+import { markFound, useAutoScan, type AutoStatus } from '../scan/useAutoScan.ts';
 
 type Phase = 'starting' | 'live' | 'nocamera' | 'reading' | 'results';
 
@@ -21,8 +23,12 @@ interface Results {
   confidence: Confidence | null;
   /** Found by auto-scan rather than the shutter or a photo */
   auto: boolean;
+  /** The card's picture matched (the card was found in the photo and straightened) */
+  byPicture: boolean;
   error: string | null;
 }
+
+const failed = (error: string): Results => ({ preview: null, guess: null, rawText: '', candidates: [], confidence: null, auto: false, byPicture: false, error });
 
 // Kept so that going back from a card's page shows the same results instead of restarting the camera.
 let lastResults: Results | null = null;
@@ -43,8 +49,19 @@ const rawTextOf = (r: ScanResult) => `${r.topText.trim()}
 ---
 ${r.bottomText.trim()}`;
 
+const resultsOf = (reading: Reading, auto: boolean): Results => ({
+  preview: reading.image.toDataURL('image/jpeg', 0.85),
+  guess: reading.ocr?.guess ?? null,
+  rawText: reading.ocr ? rawTextOf(reading.ocr) : '',
+  candidates: reading.candidates,
+  confidence: reading.confidence,
+  auto,
+  byPicture: !!reading.picture && !!reading.candidates[0]?.why.includes('picture'),
+  error: null,
+});
+
 function statusText(auto: boolean, status: AutoStatus | null): string {
-  if (!auto) return 'Fill the frame with the card, keep it flat and avoid glare, then press the button.';
+  if (!auto) return 'Show the card to the camera, keep it flat and avoid glare, then press the button.';
   switch (status?.state) {
     case 'loading':
       return 'Getting the card reader ready…';
@@ -52,12 +69,14 @@ function statusText(auto: boolean, status: AutoStatus | null): string {
       return 'Hold the card steady…';
     case 'seen':
       return `Reading ${status.text}…`;
+    case 'checking':
+      return `Looks like ${status.name}. Reading the number to tell which set it's from…`;
     case 'repeat':
       return `Already found ${status.name}. Show the next card, or press the button to read this one again.`;
     case 'failed':
       return "Auto-scan couldn't load the card reader. Check your connection, or press the button.";
     default:
-      return 'Looking for a card. Fill the frame, keep it flat and avoid glare.';
+      return 'Looking for a card. Show it to the camera, keep it flat and avoid glare.';
   }
 }
 
@@ -96,8 +115,13 @@ export function ScanPanel() {
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       });
       stream.current = s;
-      const caps = s.getVideoTracks()[0]?.getCapabilities?.() as (MediaTrackCapabilities & { torch?: boolean }) | undefined;
+      const track = s.getVideoTracks()[0];
+      const caps = track?.getCapabilities?.() as (MediaTrackCapabilities & { torch?: boolean; focusMode?: string[] }) | undefined;
       setTorch(caps?.torch ? false : null);
+      // Keep refocusing as the card moves closer or further away (Android; iPhones do this anyway).
+      if (caps?.focusMode?.includes('continuous')) {
+        track.applyConstraints({ advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet] }).catch(() => undefined);
+      }
       if (video.current) {
         video.current.srcObject = s;
         await video.current.play().catch(() => undefined);
@@ -135,45 +159,57 @@ export function ScanPanel() {
     setPhase('results');
   }
 
-  const autoStatus = useAutoScan({
+  const { status: autoStatus, outline } = useAutoScan({
     active: auto && phase === 'live',
     catalog,
     video,
     frame,
-    onFound: ({ card, result, candidates }: AutoFound) => {
+    onFound: (reading) => {
       navigator.vibrate?.(40);
-      show({ preview: card.toDataURL('image/jpeg', 0.85), guess: result.guess, rawText: rawTextOf(result), candidates, confidence: 'sure', auto: true, error: null });
+      show(resultsOf(reading, true));
     },
   });
 
-  async function read(card: HTMLCanvasElement) {
+  /** Reads a card (straightened, or a plain crop when it couldn't be found) and shows what it is. */
+  async function readAndShow(card: Straightened | HTMLCanvasElement) {
     if (!catalog) return;
-    const shot = card.toDataURL('image/jpeg', 0.85);
+    const image = card instanceof HTMLCanvasElement ? card : card.canvas;
+    setPreview(image.toDataURL('image/jpeg', 0.85));
+    setProgress('');
     setPhase('reading');
-    setPreview(shot);
     stopCamera();
     try {
-      const result = await scanCard(card, { onProgress: setProgress });
-      const candidates = identifyCard(catalog, result.guess, 12);
-      const confidence = matchConfidence(result.guess, candidates);
-      show({ preview: shot, guess: result.guess, rawText: rawTextOf(result), candidates, confidence, auto: false, error: null });
+      const reading = await readCard({ catalog, index: await loadPrintIndex(), card, onProgress: setProgress });
+      show(resultsOf(reading, false));
+      releaseCanvas(reading.image);
     } catch (err) {
-      show({ preview: shot, guess: null, rawText: '', candidates: [], confidence: null, auto: false, error: `Couldn't read the card: ${(err as Error).message}` });
-    } finally {
-      releaseCanvas(card);
+      show(failed(`Couldn't read the card: ${(err as Error).message}`));
+      releaseCanvas(image);
     }
+  }
+
+  /** The shutter: find the card in the current frame (or fall back to the guide frame) and read it. */
+  function shutter() {
+    const v = video.current;
+    const f = frame.current;
+    if (!v || !f) return;
+    const found = locateCard(v);
+    void readAndShow(found ? straightenCard(v, v.videoWidth, v.videoHeight, found.corners) : captureFrame(v, f));
   }
 
   async function onFile(file: File | undefined) {
     if (!file) return;
-    let card: HTMLCanvasElement;
+    let card: Straightened | HTMLCanvasElement;
     try {
-      card = await photoToCard(file);
+      const photo = await loadPhoto(file);
+      const found = findCard(photo, { x: 0, y: 0, w: photo.width, h: photo.height });
+      card = found ? straightenCard(photo, photo.width, photo.height, found.corners) : centerCrop(photo);
+      releaseCanvas(photo);
     } catch (err) {
-      show({ preview: null, guess: null, rawText: '', candidates: [], confidence: null, auto: false, error: `Couldn't open that photo: ${(err as Error).message}` });
+      show(failed(`Couldn't open that photo: ${(err as Error).message}`));
       return;
     }
-    await read(card);
+    await readAndShow(card);
   }
 
   async function toggleTorch() {
@@ -217,7 +253,9 @@ export function ScanPanel() {
         .filter(Boolean)
         .join(' · ')
     : '';
-  const searchText = guess ? [guess.names[0], guess.number && guess.total ? `${guess.number}/${guess.total}` : guess.number].filter(Boolean).join(' ') : '';
+  const searchText = guess
+    ? [guess.names[0], guess.number && guess.total ? `${guess.number}/${guess.total}` : guess.number].filter(Boolean).join(' ')
+    : (results?.candidates[0]?.card.name ?? ''); // recognised by its picture: search that card's printings
   const scanning = !!autoStatus && autoStatus.state !== 'repeat' && autoStatus.state !== 'failed';
   const best = results?.confidence ? results.candidates[0] : null;
   const others = results ? (best ? results.candidates.slice(1) : results.candidates) : [];
@@ -240,12 +278,17 @@ export function ScanPanel() {
 
       {(phase === 'starting' || phase === 'live') && (
         <>
-          <div className="viewfinder">
+          <div className={`viewfinder${outline ? ' has-card' : ''}`}>
             <video ref={video} playsInline muted autoPlay />
             <div className={`frame${scanning ? ' auto' : ''}${autoStatus?.state === 'seen' ? ' seen' : ''}`} ref={frame}>
               <span className="zone top">name</span>
               <span className="zone bottom">number</span>
             </div>
+            {outline && (
+              <svg className={`card-outline${outline.steady ? ' steady' : ''}`} aria-hidden="true">
+                <polygon points={outline.points.map((p) => `${p.x},${p.y}`).join(' ')} />
+              </svg>
+            )}
             {phase === 'starting' && <div className="vf-msg">Starting camera…</div>}
           </div>
           <div className="scan-status">
@@ -264,7 +307,7 @@ export function ScanPanel() {
               className="shutter"
               aria-label="Capture card"
               disabled={phase !== 'live' || !catalog}
-              onClick={() => video.current && frame.current && void read(captureFrame(video.current, frame.current))}
+              onClick={shutter}
             >
               <IconCamera />
             </button>
@@ -304,8 +347,11 @@ export function ScanPanel() {
           <div className="read-summary">
             {results.preview && <img src={results.preview} alt="Captured card" className="scan-preview small" />}
             <div>
-              <div className="muted small">We read</div>
-              <div>{readText || <span className="faint">nothing clear — try again closer, with less glare</span>}</div>
+              <div className="muted small">{results.byPicture && !readText ? 'Recognised' : 'We read'}</div>
+              <div>
+                {readText ||
+                  (results.byPicture ? 'by its picture' : <span className="faint">nothing clear — try again closer, with less glare</span>)}
+              </div>
               <div className="actions">
                 <button className="btn primary small" onClick={scanAgain}>
                   Scan again

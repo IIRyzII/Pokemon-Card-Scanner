@@ -1,6 +1,7 @@
 // Turns what the scanner read off a card into a ranked list of catalog matches.
 
 import { artistKey, normName, normNum, type Catalog, type CatalogCard } from './catalog.ts';
+import { picturePoints, type PictureMatch, type PictureVerdict } from './pictures.ts';
 
 export interface ScanGuess {
   /** Possible names read from the top of the card, best first */
@@ -61,7 +62,8 @@ export function numberSimilarity(a: string, b: string): number {
   return same / len;
 }
 
-export function identifyCard(cat: Catalog, guess: ScanGuess, limit = 12): Candidate[] {
+/** Ranks catalog cards by what was read off the card and, when given, how alike their pictures look. */
+export function identifyCard(cat: Catalog, guess: ScanGuess, limit = 12, pictures?: PictureMatch[] | null): Candidate[] {
   const found = new Map<string, Candidate>();
   const bump = (card: CatalogCard, points: number, why: string) => {
     let c = found.get(card.id);
@@ -87,6 +89,24 @@ export function identifyCard(cat: Catalog, guess: ScanGuess, limit = 12): Candid
     for (const alt of guess.alternatives) {
       for (const card of cat.byNumber.get(normNum(alt.number)) ?? []) {
         if (card.set.official === alt.total || card.set.total === alt.total) bump(card, 45, 'number');
+      }
+    }
+  }
+
+  // A slashless reading with a digit lost too ("25159" for "125/159"): near-identical numbers in
+  // sets of that size get partial credit, like a misread digit below.
+  if (!numKey && guess.alternatives?.length) {
+    for (const alt of guess.alternatives) {
+      for (const set of cat.sets) {
+        if (set.official !== alt.total && set.total !== alt.total) continue;
+        for (const card of cat.bySet.get(set.id) ?? []) {
+          if (card.numKey === normNum(alt.number)) continue; // exact: scored above
+          // Stricter than a misread digit below: the slash went missing too, so trust it less.
+          const sim = numberSimilarity(card.number, alt.number);
+          if (sim < 0.6) continue;
+          bump(card, Math.round(20 * sim), 'number≈');
+          bump(card, 25, 'set size');
+        }
       }
     }
   }
@@ -117,6 +137,11 @@ export function identifyCard(cat: Catalog, guess: ScanGuess, limit = 12): Candid
       if (best < 0.55) continue;
       for (const card of cards) bump(card, Math.round(best * 40), 'name');
     }
+  }
+
+  for (const m of pictures ?? []) {
+    const points = picturePoints(m.distance);
+    if (points > 0) bump(m.card, points, 'picture');
   }
 
   if (guess.hp) {
@@ -155,24 +180,40 @@ export type Confidence = 'sure' | 'likely';
 
 /**
  * How sure we can be that the top candidate is the card that was scanned:
- *  - 'sure': the printed number pins down the set (set size, set code or a prefixed
- *    number like "SWSH050"), the name or HP agrees, and no other card comes close.
- *    Auto-scan picks these by itself;
- *  - 'likely': a clear leader on the number and set alone, or on a near-miss number
- *    plus set and name. Shown first as the best match;
+ *  - 'sure': the picture is a close, clear match to one card; or it matches several printings
+ *    of the same card and the printed number says which; or (no usable picture) the printed
+ *    number pins down the set and the name or HP agrees. Auto-scan picks these by itself;
+ *  - 'likely': a clear leader on less evidence. Shown first as the best match;
  *  - null: too close to call, so the person picks from the list.
+ * `picture`: what the card's picture matched, when the card was found and straightened.
  */
-export function matchConfidence(guess: ScanGuess, candidates: Candidate[]): Confidence | null {
+export function matchConfidence(guess: ScanGuess, candidates: Candidate[], picture?: PictureVerdict | null): Confidence | null {
   const [top, next] = candidates;
-  if (!top || top.score - (next?.score ?? 0) < 15) return null;
+  if (!top) return null;
   const has = (why: string) => top.why.includes(why);
   const set = has('set size') || has('set code');
   // A slashless reading ("4102" → 4/102) only counts inside a set of that size, so it pins the set too.
   const pinned = has('number') && (set || !guess.number || /^[A-Z]{1,4}\d/i.test(guess.number));
+
+  if (picture?.clear) {
+    if (!picture.twins.length) return top.card.id === picture.best.card.id ? 'sure' : null;
+    // Reprints with the same picture: the picture says which card, the printed number, set size
+    // or set code has to say which printing — and clearly favour one of them.
+    const group = new Set([picture.best, ...picture.twins].map((m) => m.card.id));
+    if (!group.has(top.card.id)) return null;
+    const runnerUp = candidates.find((c) => c !== top && group.has(c.card.id));
+    const printed = has('number') || has('number≈') || set;
+    return printed && top.score - (runnerUp?.score ?? 0) >= 15 ? 'sure' : 'likely';
+  }
+
+  if (top.score - (next?.score ?? 0) < 15) return null;
   const nameSim = nameMatch(guess, top.card);
   const agrees = nameSim >= 0.7 || (!!guess.hp && guess.hp === top.card.hp);
-  if (pinned && agrees) return 'sure';
-  if (has('number') && has('set size') && has('set code')) return 'sure';
-  if (pinned || (has('number≈') && set && nameSim >= 0.7)) return 'likely';
-  return null;
+  let level: Confidence | null = null;
+  if (pinned && agrees) level = 'sure';
+  else if (has('number') && has('set size') && has('set code')) level = 'sure';
+  else if (pinned || (has('number≈') && set && nameSim >= 0.7)) level = 'likely';
+  // We saw the card's picture and it doesn't look like this one: don't trust the text alone.
+  if (level === 'sure' && picture && top.card.image && !has('picture')) level = 'likely';
+  return level;
 }

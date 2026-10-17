@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "node ../scripts/build-catalog.mjs --out public/catalog --if-missing",
+    "predev": "node --experimental-strip-types ../scripts/build-catalog.mjs --out public/catalog --if-missing",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",

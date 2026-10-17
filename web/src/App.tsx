@@ -15,6 +15,8 @@ import { CollectionPage } from './pages/CollectionPage.tsx';
 import { ItemPage } from './pages/ItemPage.tsx';
 import { LoginPage } from './pages/LoginPage.tsx';
 import { PendingPage } from './pages/PendingPage.tsx';
+import { SetPage } from './pages/SetPage.tsx';
+import { SetsPage } from './pages/SetsPage.tsx';
 import { TrashPage } from './pages/TrashPage.tsx';
 
 export function App() {
@@ -51,6 +53,12 @@ function Shell() {
       break;
     case 'add':
       page = <AddPage key={route.query.get('q') ?? ''} tab={id === 'scan' ? 'scan' : 'search'} initialQuery={route.query.get('q') ?? ''} />;
+      break;
+    case 'sets':
+      page = <SetsPage />;
+      break;
+    case 'set':
+      page = <SetPage key={id} id={id} />;
       break;
     case 'artists':
       page = <ArtistsPage />;
@@ -89,7 +97,7 @@ function Shell() {
       </header>
       <main>{page}</main>
       <nav className="tabbar" aria-label="Main">
-        {tab('#/', 'Collection', <IconCards />, !section || section === 'item')}
+        {tab('#/', 'Collection', <IconCards />, !section || section === 'item' || section === 'sets' || section === 'set')}
         {canEdit && tab(href('add', 'scan'), 'Add', <IconPlus />, section === 'add' || section === 'card')}
         {tab('#/artists', 'Artists', <IconBrush />, section === 'artists' || section === 'artist')}
         {isAdmin && tab('#/admin', 'Admin', <IconShield />, section === 'admin')}

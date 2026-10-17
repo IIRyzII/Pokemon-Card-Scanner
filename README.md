@@ -2,7 +2,7 @@
 
 A phone-friendly web app for tracking a Pokémon card collection:
 
-- **Scan** a card with your phone camera: hold it steady and **auto-scan** finds it on its own (or tap the shutter, or use a photo). Or **search** by name / set / number (`charizard 4/102`).
+- **Scan** a card with your phone camera: hold it in view, at any angle, and **auto-scan** recognises it by its picture, usually in under a second (or tap the shutter, or use a photo). Or **search** by name / set / number (`charizard 4/102`).
 - **Confirm before adding**: pick the printing (normal, holo, reverse, 1st edition), raw condition or graded slab (PSA, BGS, CGC, SGC, TAG, ACE), quantity and what you paid, then review and confirm.
 - Every card shows its **image, name, set, number** and **price**. Totals for the whole collection are at the top.
 - **Raw prices** (TCGplayer + Cardmarket) refresh daily, and the app keeps its **own price history**.
@@ -11,6 +11,7 @@ A phone-friendly web app for tracking a Pokémon card collection:
   - Logged sales and purchase prices remember the currency they were entered in.
   - eBay links open your local eBay (ebay.co.uk for GBP).
 - **Graded prices**: log eBay sold prices (one tap opens eBay's *sold* listings for that exact card and grade). Optional PriceCharting support fills in PSA/BGS/CGC/SGC prices automatically.
+- **Set progress**: see how complete each set is, and open a set to see every card in number order, with the ones you're missing greyed out.
 - **Artists**: sort your collection by illustrator, browse every artist's cards and see which ones you own. Each card links to Serebii and Art of Pokémon.
 - **Login + roles (RBAC)**: Admin, Editor, Viewer and Pending, plus an activity log, a "recently removed" trash and backups.
 - Works like an app on your phone: **Add to Home Screen** and it opens full screen, even offline.
@@ -22,8 +23,8 @@ A phone-friendly web app for tracking a Pokémon card collection:
 ┌──────────────────┐  served by  ┌──────────────────────┐        ┌───────────────────────────┐
 │  PokéVault app   │◄────────────│ GitHub Pages          │        │ PokéVault API (Worker)    │
 │  (React PWA)     │             │  • the web app        │        │  • login, roles, sessions │
-│  • camera + OCR  │             │  • our card catalog   │        │  • collection, sales      │
-│    on the phone  │── API ─────────────────────────────────────►│  • prices + history       │
+│  • camera, card  │             │  • our card catalog   │        │  • collection, sales      │
+│    recognition   │── API ─────────────────────────────────────►│  • prices + history       │
 └──────────────────┘             │ GitHub Actions        │        │ D1 database (SQLite)      │
                                  │  • builds catalog     │        │ hourly price refresh      │
                                  │    weekly + deploys   │        └────────────┬──────────────┘
@@ -31,9 +32,9 @@ A phone-friendly web app for tracking a Pokémon card collection:
                                             └──── open card data ───► TCGdex ◄┘
 ```
 
-- **`web/`**: the app (React + TypeScript + Vite). Card recognition runs **on the phone** with Tesseract OCR, so photos are never uploaded.
+- **`web/`**: the app (React + TypeScript + Vite). Card recognition runs **on the phone**, so photos are never uploaded: it finds the card in the camera picture, straightens it, matches its picture against every card, and reads the printed number with Tesseract OCR when that's needed.
 - **`api/`**: our own API, a Cloudflare Worker with a D1 database. GitHub Pages can only host static files, so the part that stores data lives on Cloudflare's free tier.
-- **`scripts/build-catalog.mjs`**: builds **our own card catalog** (≈21,000 cards, 205 sets, 400 artists) from the open [TCGdex](https://tcgdex.dev) data. GitHub Actions rebuilds it every week, and the app searches and identifies scans against it with no third-party API calls.
+- **`scripts/build-catalog.mjs`**: builds **our own card catalog** (≈21,000 cards, 205 sets, 400 artists) from the open [TCGdex](https://tcgdex.dev) data, plus a **fingerprint of every card's picture** (`prints.bin`, about 750 KB) that the scanner matches against. GitHub Actions rebuilds both every week, and the app searches and identifies scans against them with no third-party API calls.
 - **`shared/`**: code used by both: grading scales, how a copy is valued, and outbound links.
 
 ### Where prices come from
@@ -133,13 +134,16 @@ The API enforces roles on every request, so hiding a button in the app is never 
 
 ## Scanning tips
 
-- Fill the on-screen frame with the card, keep it flat, and avoid glare from holo foil. The flashlight button helps in dim rooms.
-- **Auto-scan** is on by default: hold the card steady in the frame and the app finds it without you pressing anything.
-  - It only picks a card when the reading points to exactly one: the printed number and set, plus the name or HP.
-  - The line under the camera shows what it has read so far. If it can't be sure, it keeps trying on new frames. Tap the shutter to see the closest matches yourself.
+- Show the card to the camera with the whole card in view, keep it flat, and avoid glare from holo foil. It doesn't need to fill the frame or be straight. The flashlight button helps in dim rooms.
+- The scanner outlines the card it has found (green once you're holding it steady), straightens it, and compares its picture with every card in the catalog.
+- **Auto-scan** is on by default, so you don't need to press anything.
+  - A close, clear picture match is picked straight away, usually in under a second, upside down too.
+  - Reprints share their artwork with other printings (Base Set and Base Set 2 Charizard, say), so the scanner then reads the printed number or set to tell which one you have ("Looks like Charizard. Reading the number…").
+  - It never picks a card it isn't sure of. If it can't be, it keeps trying on new frames; tap the shutter to see the closest matches yourself.
   - **Scan again** won't pick up the same card while it's still in view. Swap in the next card and it carries on.
   - Turn it off with the **Auto-scan** button under the camera. The app remembers your choice.
-- The scanner reads the **name and HP** at the top and the **number / set size / set code** at the bottom (`025/165`, `MEW`, `TG05/TG30`, `SWSH050`). It then shows the best match, plus other close matches with pictures.
+- If the card's outline can't be found (a white card on a white table, say), it reads the card inside the on-screen frame instead, from its **name and HP** at the top and the **number / set size / set code** at the bottom (`025/165`, `MEW`, `TG05/TG30`, `SWSH050`).
+- Photos work the same way: the card can be anywhere in the photo.
 - Nothing is added until you tap a match, review the details and press **Confirm & add**.
 - If the scan isn't sure, tap **Search instead**. Your words are pre-filled, so you can fix a letter or two.
 
@@ -154,11 +158,13 @@ npm run dev:web   # app on http://localhost:5173 (builds the catalog the first t
 For local development, create `web/.env.local` containing `VITE_API_URL=http://127.0.0.1:8787`, or paste that address on the sign-in screen.
 
 ```bash
-npm test                    # unit tests: values, OCR parsing, search & card identification
+npm test                    # unit tests: values, OCR parsing, search, card finding & picture matching
 npm run typecheck           # TypeScript for web + api
 cd api && npm test          # end-to-end API test — needs a fresh `npm run dev:api` (delete api/.wrangler first)
-npm run catalog             # rebuild the card catalog from TCGdex
+npm run catalog             # rebuild the card catalog and picture fingerprints from TCGdex
 ```
+
+The first `npm run catalog` downloads every card's small picture (about 20,000 images) to fingerprint them, which takes around 10 minutes. After that, fingerprints are reused and only new cards are downloaded. The weekly GitHub build reuses the ones already on your site. Without `prints.bin`, the scanner still works by reading the card's text.
 
 To test on your phone before deploying, use the GitHub Pages URL. The camera and secure sign-in only work over `https://` or on `localhost`.
 

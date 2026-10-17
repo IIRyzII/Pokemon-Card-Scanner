@@ -126,3 +126,21 @@ test('confidence: ambiguous or conflicting reads are never auto-picked', () => {
   assert.equal(confidence(read({ names: ['Blastoise'], number: '4', total: 102, hp: 100 })).level, null);
   assert.equal(confidence(read({})).level, null);
 });
+
+test('reprints that share a picture: a garbled number still says which printing', async () => {
+  const { pictureVerdict } = await import('./pictures.ts');
+  // Crown Zenith's Crushing Hammer (125/159) reprints Sword & Shield's (159/202). OCR read "25159".
+  const crz = cat.byId.get('swsh12.5-125')!;
+  const ssh = cat.byId.get('swsh1-159')!;
+  const pictures = [
+    { card: crz, distance: 18 },
+    { card: ssh, distance: 24 },
+  ];
+  const g = read({ names: ['Crushing Hammer'], alternatives: [{ number: '25', total: 159 }, { number: '251', total: 59 }] });
+  const r = identifyCard(cat, g, 12, pictures);
+  assert.equal(r[0].card.id, 'swsh12.5-125');
+  assert.equal(matchConfidence(g, r, pictureVerdict(pictures)), 'sure');
+  // With nothing read off the bottom of the card, it can't tell the printings apart.
+  const nameOnly = read({ names: ['Crushing Hammer'] });
+  assert.equal(matchConfidence(nameOnly, identifyCard(cat, nameOnly, 12, pictures), pictureVerdict(pictures)), 'likely');
+});

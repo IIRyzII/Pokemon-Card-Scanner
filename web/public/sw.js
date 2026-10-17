@@ -2,7 +2,8 @@
 // - Install: precache the app shell (index.html + the files it references) and the card catalog.
 // - Pages: network-first, falling back to the cached shell when offline.
 // - App files (content-hashed by Vite): cache-first.
-// - Catalog: meta.json network-first; catalog.json?v=<hash> cache-first (old versions pruned).
+// - Catalog: meta.json network-first; catalog.json?v=<hash> and prints.bin?v=<hash> (card picture
+//   fingerprints for the scanner) cache-first, old versions pruned.
 // - OCR engine files: cache-first. Card images use the browser's HTTP cache (immutable for a year).
 // - API calls are never cached.
 
@@ -85,7 +86,7 @@ self.addEventListener('fetch', (event) => {
       event.respondWith(networkFirst(request, SHELL, scoped('./')));
     } else if (url.pathname.endsWith('/catalog/meta.json')) {
       event.respondWith(networkFirst(request, SHELL));
-    } else if (url.pathname.endsWith('/catalog/catalog.json') && url.searchParams.has('v')) {
+    } else if ((url.pathname.endsWith('/catalog/catalog.json') || url.pathname.endsWith('/catalog/prints.bin')) && url.searchParams.has('v')) {
       // Keep only the newest catalog version.
       const pruneOld = async (cache) => {
         for (const key of await cache.keys()) {
