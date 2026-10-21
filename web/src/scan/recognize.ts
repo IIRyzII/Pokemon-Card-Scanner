@@ -1,14 +1,13 @@
 // One look at a card: match its picture against every card in the catalog, and read its text
 // when the picture alone can't settle it (reprints share artwork; only the number tells them apart).
 
-import { cardPrint } from '../../../shared/cardprint.ts';
 import type { Catalog } from '../lib/catalog.ts';
 import { identifyCard, matchConfidence, type Candidate, type Confidence, type ScanGuess } from '../lib/match.ts';
-import { nearestEitherWay, pictureVerdict, type PictureMatch, type PictureVerdict, type PrintIndex } from '../lib/pictures.ts';
+import { matchCardPicture, type PictureLook, type PictureMatch, type PictureVerdict, type PrintIndex } from '../lib/pictures.ts';
 import type { Straightened } from './locate.ts';
 import { toCanvas } from './locate.ts';
 import { releaseCanvas, scanCard, type ScanOptions, type ScanResult } from './ocr.ts';
-import { rotate180, type Rgba } from './warp.ts';
+import { cropMargins, rotate180, type Rgba } from './warp.ts';
 
 export interface Reading {
   /** The card as read: straightened when it was found in the picture, else the guide-frame crop */
@@ -24,12 +23,17 @@ export interface Reading {
 
 const NOTHING_READ: ScanGuess = { names: [], number: null, total: null, setCode: null, artist: null };
 
-const printOf = (img: Rgba) => cardPrint({ data: img.data, width: img.width, height: img.height, channels: 4 });
+const px = (img: Rgba) => ({ data: img.data, width: img.width, height: img.height, channels: 4 as const });
 
-/** What a straightened card's picture matches, trying it both ways up. */
-export function matchPicture(index: PrintIndex, card: Rgba): { matches: PictureMatch[]; flipped: boolean; picture: PictureVerdict | null } {
-  const { matches, flipped } = nearestEitherWay(index, printOf(card), printOf(rotate180(card)));
-  return { matches, flipped, picture: pictureVerdict(matches) };
+/**
+ * What a straightened card's picture matches, trying it both ways up (and, for a card in a
+ * sleeve, inside the margins sleeves leave). `upright`: the card as matched, the right way up and
+ * cut out of its sleeve, for reading and showing.
+ */
+export function matchPicture(index: PrintIndex, card: Rgba): PictureLook & { upright: Rgba } {
+  const turned = rotate180(card);
+  const look = matchCardPicture(index, px(card), px(turned));
+  return { ...look, upright: cropMargins(look.flipped ? turned : card, look.margins) };
 }
 
 /**
@@ -64,13 +68,12 @@ export async function readCard({ catalog, index, card, quick, retry, signal, onP
   let picture: PictureVerdict | null = null;
   if (index && !(card instanceof HTMLCanvasElement)) {
     const match = matchPicture(index, card.rgba);
-    const flipped = match.flipped;
     pictures = match.matches;
     picture = match.picture;
-    if (flipped) {
-      // The card was upside down: turn it the right way up before reading its text.
+    if (match.upright !== card.rgba) {
+      // The card was upside down, or in a sleeve: read it the right way up, without the sleeve.
       releaseCanvas(image);
-      image = toCanvas(rotate180(card.rgba));
+      image = toCanvas(match.upright);
     }
     if (picture?.clear && !picture.twins.length) return readingFromPicture(catalog, pictures, picture, image);
   }

@@ -86,3 +86,18 @@ export function rotate180(img: Rgba): Rgba {
   for (let p = 0; p < n; p++) out.set(img.data.subarray(p * 4, p * 4 + 4), (n - 1 - p) * 4);
   return { data: out, width: img.width, height: img.height };
 }
+
+/** The part of an image inside margins (shares of it: [left, top, right, bottom]), e.g. a card inside its sleeve. */
+export function cropMargins(img: Rgba, [l, t, r, b]: readonly [number, number, number, number]): Rgba {
+  if (!l && !t && !r && !b) return img;
+  const x0 = Math.round(l * img.width);
+  const y0 = Math.round(t * img.height);
+  const w = Math.max(1, Math.min(img.width - x0, Math.round((1 - l - r) * img.width)));
+  const h = Math.max(1, Math.min(img.height - y0, Math.round((1 - t - b) * img.height)));
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    const from = ((y0 + y) * img.width + x0) * 4;
+    out.set(img.data.subarray(from, from + w * 4), y * w * 4);
+  }
+  return { data: out, width: w, height: h };
+}

@@ -125,11 +125,29 @@ export const PRINT_SPEC = {
 export const PRINT_BITS = PRINT_SPEC.parts.reduce((sum, p) => sum + p.k * p.k - 1, 0);
 export const PRINT_WORDS = Math.ceil(PRINT_BITS / 32);
 
+/** Margins round a card inside a picture, as shares of it: [left, top, right, bottom]. */
+export type Margins = readonly [number, number, number, number];
+export const NO_MARGINS: Margins = [0, 0, 0, 0];
+
 /** The fingerprint of a card picture: the whole card, upright, edge to edge. */
 export function cardPrint(px: Pixels): Uint32Array {
+  return cardPrintInside(px, NO_MARGINS);
+}
+
+/**
+ * The fingerprint of the card inside `margins` of a picture: a card in a sleeve, when the edge
+ * found was the sleeve's. (No margins: the same as cardPrint.)
+ */
+export function cardPrintInside(px: Pixels, [l, t, r, b]: Margins): Uint32Array {
   const gray = grayscale(px);
+  const w = 1 - l - r;
+  const h = 1 - t - b;
   const bits: number[] = [];
-  for (const p of PRINT_SPEC.parts) bits.push(...phashBits(gray, px.width, px.height, p.box, p.n, p.k));
+  for (const p of PRINT_SPEC.parts) {
+    const [x0, y0, x1, y1] = p.box;
+    const box: Box = [l + x0 * w, t + y0 * h, l + x1 * w, t + y1 * h];
+    bits.push(...phashBits(gray, px.width, px.height, box, p.n, p.k));
+  }
   return packBits(bits);
 }
 

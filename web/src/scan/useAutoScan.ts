@@ -14,7 +14,6 @@ import { cornerShift, locateCard, smallCard, straightenCard, toCanvas, toElement
 import { frameChange, snapshot } from './motion.ts';
 import { captureFrame, frameCrop, releaseCanvas, warmUpOcr } from './ocr.ts';
 import { matchPicture, readCard, readingFromPicture, type Reading } from './recognize.ts';
-import { rotate180 } from './warp.ts';
 
 export type AutoStatus =
   | { state: 'loading' }
@@ -154,11 +153,11 @@ export function useAutoScan({ active, catalog, video, frame, onFound, keepGoing 
           let readNow = still && performance.now() >= restUntil;
           if (index) {
             const small = smallCard(detection);
-            const { matches, flipped, picture } = matchPicture(index, small);
+            const { matches, picture, upright } = matchPicture(index, small);
             recent = [...recent, matches].slice(-LOOKS);
             // Settled by the picture we just matched. (Grabbing a fresh frame now could catch the card
             // somewhere else if it's moving.)
-            const image = () => toCanvas(flipped ? rotate180(small) : small);
+            const image = () => toCanvas(upright);
             // Glare or blur can keep every single look from being sure while the same card stays
             // closest: the last few looks together can settle it (reprints included, when one
             // printing is clearly closer).

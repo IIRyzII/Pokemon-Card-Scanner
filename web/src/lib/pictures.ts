@@ -1,7 +1,7 @@
 // Recognising a card by its picture: every catalog card's fingerprint (prints.bin, made by the
 // catalog builder) compared with the fingerprint of the card the camera sees.
 
-import { hamming, PRINT_BITS, PRINT_WORDS } from '../../../shared/cardprint.ts';
+import { cardPrintInside, hamming, NO_MARGINS, PRINT_BITS, PRINT_WORDS, type Margins, type Pixels } from '../../../shared/cardprint.ts';
 import type { CatalogCard } from './catalog.ts';
 
 export interface PictureMatch {
@@ -109,6 +109,51 @@ export function settleOverLooks(looks: PictureMatch[][]): { picture: PictureVerd
   if (!v || v.best.distance > STEADY_CLOSE || v.gap < STEADY_CLEAR) return null;
   if (v.twins.length && v.twins[0].distance - v.best.distance < REPRINT_MARGIN) return null; // the number has to say
   return { picture: { ...v, twins: [], clear: true }, matches: averaged };
+}
+
+/**
+ * The card inside a sleeve: the edge found is often the sleeve's (a penny sleeve's few millimetres
+ * of clear plastic, a top loader's thick border), and a picture taken with that margin matches
+ * badly. These are the margins sleeves leave, as shares of the outline found; the one whose
+ * picture matches closest is the card. (In tests with sleeved cards, cards found went from 35% to
+ * 83%; with bare cards and things that aren't cards, no change.)
+ */
+export const SLEEVE_MARGINS: readonly Margins[] = [
+  [0.012, 0.01, 0.012, 0.006], // a perfect-fit sleeve
+  [0.022, 0.037, 0.022, 0.011], // a penny sleeve, its open end at the top…
+  [0.022, 0.011, 0.022, 0.037], // …or at the bottom
+  [0.05, 0.04, 0.05, 0.04], // loose
+  [0.086, 0.064, 0.086, 0.064], // a top loader
+];
+
+export interface PictureLook {
+  matches: PictureMatch[];
+  picture: PictureVerdict | null;
+  /** The card was upside down (the matches are for it turned the right way up) */
+  flipped: boolean;
+  /** Where the card is inside the picture, the right way up (no margins: edge to edge) */
+  margins: Margins;
+}
+
+/**
+ * What a straightened card's picture matches, trying it both ways up — and, when that isn't
+ * clear, the card inside a sleeve at the margins sleeves leave, keeping whichever matches closest.
+ */
+export function matchCardPicture(index: PrintIndex, card: Pixels & { channels: 4 }, upsideDown: Pixels & { channels: 4 }): PictureLook {
+  const look = (margins: Margins) => {
+    const { matches, flipped } = nearestEitherWay(index, cardPrintInside(card, margins), cardPrintInside(upsideDown, margins));
+    return { matches, flipped, margins };
+  };
+  let best = look(NO_MARGINS);
+  let picture = pictureVerdict(best.matches);
+  if (!picture?.clear) {
+    for (const margins of SLEEVE_MARGINS) {
+      const l = look(margins);
+      if ((l.matches[0]?.distance ?? Infinity) < (best.matches[0]?.distance ?? Infinity)) best = l;
+    }
+    picture = pictureVerdict(best.matches);
+  }
+  return { ...best, picture };
 }
 
 /** What the picture alone says about which card this is. */

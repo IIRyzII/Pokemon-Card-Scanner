@@ -45,3 +45,27 @@ test('area-averaged resample keeps the average', () => {
   const out = resample(gray, 10, 10, [0, 0, 1, 1], 5, 5);
   for (const v of out) assert.ok(Math.abs(v - 100) < 1e-3);
 });
+
+test('a print inside margins is the print of the card cut out at those margins; no margins changes nothing', async () => {
+  const { cardPrintInside, NO_MARGINS, cardPrint: print, hamming: dist } = await import('./cardprint.ts');
+  const { cropMargins } = await import('../web/src/scan/warp.ts');
+  // a sleeve-like picture: a grey border round a patterned card
+  const width = 140;
+  const height = 196;
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const inCard = x >= 14 && x < 126 && y >= 12 && y < 184;
+      const v = inCard ? 128 + 100 * Math.sin(x / 7) * Math.cos(y / 11) : 200;
+      data[i] = data[i + 1] = data[i + 2] = v;
+      data[i + 3] = 255;
+    }
+  const sleeve = { data, width, height, channels: 4 as const };
+  assert.deepEqual(cardPrintInside(sleeve, NO_MARGINS), print(sleeve));
+  const margins = [14 / 140, 12 / 196, 14 / 140, 12 / 196] as const;
+  const cut = cropMargins({ data, width, height }, margins);
+  const inside = cardPrintInside(sleeve, margins);
+  assert.ok(dist(inside, print({ ...cut, channels: 4 }), 0) <= 6, 'the same card, give or take a pixel');
+  assert.ok(dist(print(sleeve), print({ ...cut, channels: 4 }), 0) > 20, 'while the sleeve and all looks different');
+});
