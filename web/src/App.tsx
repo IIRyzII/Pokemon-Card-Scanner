@@ -56,11 +56,7 @@ function Shell() {
       break;
     case 'add':
       page = (
-        <AddPage
-          key={route.query.get('q') ?? ''}
-          tab={id === 'scan' || id === 'list' ? id : 'search'}
-          initialQuery={route.query.get('q') ?? ''}
-        />
+        <AddPage key={route.query.get('q') ?? ''} tab={id === 'scan' || id === 'list' ? id : 'search'} />
       );
       break;
     case 'sets':

@@ -1,10 +1,10 @@
-import { Suspense, lazy, useDeferredValue, useMemo, useState } from 'react';
+import { Suspense, lazy, useDeferredValue, useMemo } from 'react';
 import { CatalogTile } from '../components/CardTile.tsx';
 import { ErrorBoundary } from '../components/ErrorBoundary.tsx';
 import { IconList, IconScan, IconSearch } from '../components/Icons.tsx';
 import { searchCards } from '../lib/catalog.ts';
 import { ownedCount, useCollection } from '../lib/collection.tsx';
-import { href } from '../lib/router.ts';
+import { href, useQueryParam } from '../lib/router.ts';
 import { copiesIn, useScanList } from '../lib/scanList.ts';
 import { useCatalog } from '../lib/useCatalog.ts';
 import { ScanListPanel } from './ScanListPanel.tsx';
@@ -12,12 +12,15 @@ import { ScanListPanel } from './ScanListPanel.tsx';
 // The scanner (and its OCR engine) only downloads when the Scan tab is opened.
 const ScanPanel = lazy(() => import('./ScanPanel.tsx').then((m) => ({ default: m.ScanPanel })));
 
-export function AddPage({ tab, initialQuery }: { tab: 'search' | 'scan' | 'list'; initialQuery?: string }) {
+/** The last search, so the Search tab comes back to it from Scan or List. */
+let lastSearch = '';
+
+export function AddPage({ tab }: { tab: 'search' | 'scan' | 'list' }) {
   const inList = copiesIn(useScanList());
   return (
     <div className="page">
       <div className="segmented full tabs">
-        <a className={tab === 'search' ? 'on' : ''} href={href('add')}>
+        <a className={tab === 'search' ? 'on' : ''} href={lastSearch ? `${href('add')}?q=${encodeURIComponent(lastSearch)}` : href('add')}>
           <IconSearch width={18} height={18} /> Search
         </a>
         <a className={tab === 'scan' ? 'on' : ''} href={href('add', 'scan')}>
@@ -39,7 +42,7 @@ export function AddPage({ tab, initialQuery }: { tab: 'search' | 'scan' | 'list'
       ) : tab === 'list' ? (
         <ScanListPanel />
       ) : (
-        <SearchPanel initialQuery={initialQuery ?? ''} />
+        <SearchPanel />
       )}
     </div>
   );
@@ -61,10 +64,15 @@ function ScannerFailed({ error }: { error: Error }) {
   );
 }
 
-function SearchPanel({ initialQuery }: { initialQuery: string }) {
+function SearchPanel() {
   const { catalog, error } = useCatalog();
   const { ownedByCard } = useCollection();
-  const [query, setQuery] = useState(initialQuery);
+  // Kept in the address (#/add?q=shuckle), so coming back from a card shows the same results.
+  const [query, setQueryParam] = useQueryParam('q');
+  const setQuery = (q: string) => {
+    lastSearch = q.trim() ? q : '';
+    setQueryParam(q);
+  };
   const deferred = useDeferredValue(query);
   const results = useMemo(() => (catalog ? searchCards(catalog, deferred, 90) : []), [catalog, deferred]);
 

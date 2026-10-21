@@ -10,7 +10,7 @@ import { useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
 import { copiesByCard, spares } from '../lib/dupes.ts';
 import { relativeTime } from '../lib/format.ts';
-import { href } from '../lib/router.ts';
+import { href, useQueryParam } from '../lib/router.ts';
 import { useSession } from '../lib/session.tsx';
 import { useCatalog } from '../lib/useCatalog.ts';
 
@@ -87,9 +87,12 @@ export function CollectionPage() {
   const { user } = useSession();
   const { catalog } = useCatalog();
   const { format, convert, currency } = useCurrency();
-  const [query, setQuery] = useState('');
+  // Search and filter kept in the address, so coming back from a card shows the same cards.
+  const [query, setQuery] = useQueryParam('q');
+  const [shown, setShown] = useQueryParam('show', 'all');
+  const filter: Filter = shown in FILTERS ? (shown as Filter) : 'all';
+  const setFilter = (f: Filter) => setShown(f);
   const [sort, setSortState] = useState<SortKey>(readSort);
-  const [filter, setFilter] = useState<Filter>('all');
   const canEdit = hasRole(user?.role, 'editor');
   const copies = useMemo(() => copiesByCard(data?.items ?? []), [data]);
   const duplicates = useCombineDuplicates();
