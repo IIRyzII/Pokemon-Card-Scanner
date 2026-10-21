@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { languageLabel } from '../../../shared/languages.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import type { CollectionItem } from '../../../shared/types.ts';
 import { hasRole } from '../../../shared/types.ts';
@@ -115,7 +116,7 @@ export function CollectionPage() {
       if (filter === 'dupes' && (copies.get(i.cardId) ?? 0) < 2) return false;
       if (!q) return true;
       const hay = normName(
-        `${i.name} ${i.setName} ${i.number} ${canonicalArtist(catalog, i.artist) ?? ''} ${i.grader === 'RAW' ? '' : `${i.grader} ${i.grade}`} ${i.notes ?? ''}`,
+        `${i.name} ${i.setName} ${i.number} ${canonicalArtist(catalog, i.artist) ?? ''} ${i.grader === 'RAW' ? '' : `${i.grader} ${i.grade}`} ${i.language && i.language !== 'en' ? languageLabel(i.language) : ''} ${i.notes ?? ''}`,
       );
       return q.split(' ').every((w) => hay.includes(w));
     });

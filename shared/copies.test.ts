@@ -89,3 +89,9 @@ test('combining never makes an entry hold more than 999 copies', () => {
   );
   assert.deepEqual(planMerges([e('a', 1, '1')]), []);
 });
+
+test('copies in different languages keep their own entries', () => {
+  assert.ok(sameCopy(raw({ language: 'en' }), raw()), 'no language: English');
+  assert.ok(!sameCopy(raw({ language: 'fr' }), raw({ language: 'en' })));
+  assert.ok(sameCopy(raw({ language: 'de' }), raw({ language: 'de' })));
+});

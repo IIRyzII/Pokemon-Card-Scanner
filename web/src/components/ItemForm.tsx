@@ -12,12 +12,14 @@ import {
   type Variant,
 } from '../../../shared/grading.ts';
 import { CURRENCIES } from '../../../shared/currency.ts';
+import { DEFAULT_LANGUAGE, LANGUAGES, LANGUAGE_CODES } from '../../../shared/languages.ts';
 import type { ItemFields } from '../../../shared/types.ts';
 import { useCurrency } from '../lib/currency.tsx';
 
 export function defaultFields(variants: string[], currency: string): ItemFields {
   return {
     variant: variants[0] ?? 'normal',
+    language: DEFAULT_LANGUAGE,
     grader: 'RAW',
     grade: null,
     gradeLabel: null,
@@ -62,6 +64,17 @@ export function ItemForm({ value, onChange, variants }: Props) {
           ))}
         </div>
       </fieldset>
+
+      <label>
+        Language
+        <select value={value.language ?? DEFAULT_LANGUAGE} onChange={(e) => set({ language: e.target.value })}>
+          {LANGUAGE_CODES.map((l) => (
+            <option key={l} value={l}>
+              {LANGUAGES[l].label}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <fieldset>
         <legend>Raw or graded?</legend>

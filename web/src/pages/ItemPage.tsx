@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { languageLabel } from '../../../shared/languages.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import { hasRole, type CardDetailResponse, type CollectionItem, type ItemFields } from '../../../shared/types.ts';
 import { CardImage } from '../components/CardImage.tsx';
@@ -138,6 +139,10 @@ export function ItemPage({ id }: { id: string }) {
           </div>
 
           <dl className="facts">
+            <div>
+              <dt>Language</dt>
+              <dd>{languageLabel(item.language)}</dd>
+            </div>
             {item.grader === 'RAW' && item.condition && (
               <div>
                 <dt>Condition</dt>
@@ -186,6 +191,7 @@ export function ItemPage({ id }: { id: string }) {
                 onClick={() =>
                   setEditing({
                     variant: item.variant,
+                    language: item.language ?? 'en',
                     grader: item.grader,
                     grade: item.grade,
                     gradeLabel: item.gradeLabel,

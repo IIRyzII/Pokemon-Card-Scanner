@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { PRINT_WORDS } from '../../../shared/cardprint.ts';
 import type { CatalogCard } from './catalog.ts';
 import { identifyCard, matchConfidence, type Candidate, type ScanGuess } from './match.ts';
-import { CLEAR, CLOSE, PrintIndex, pictureVerdict, TWIN, type PictureMatch } from './pictures.ts';
+import { CLEAR, CLOSE, PrintIndex, REPRINT_MARGIN, STEADY_CLEAR, STEADY_CLOSE, pictureVerdict, settleOverLooks, TWIN, type PictureMatch } from './pictures.ts';
 
 const card = (id: string, name: string, number = '1'): CatalogCard =>
   ({ id, name, number, nameKey: name.toLowerCase(), nameWords: name.toLowerCase().split(' '), numKey: number, image: 'x', set: { id: id.split('-')[0] } }) as unknown as CatalogCard;
@@ -72,4 +72,44 @@ test('confidence: text that is "sure" but unlike the picture is only likely', ()
   const unclear = pictureVerdict([m(card('z-9', 'Zubat'), 95), m(card('y-9', 'Golbat'), 97)]);
   assert.equal(matchConfidence(read, [top], unclear), 'likely');
   assert.equal(matchConfidence(read, [top], null), 'sure', 'no picture to compare (card not found in the photo)');
+});
+
+test('over several looks: glare that pushes each look past CLOSE still settles on the card that stays closest', () => {
+  const shuckle = card('sm8-16', 'Shuckle');
+  const other = card('sv04-1', 'Surskit');
+  const far = card('base1-4', 'Charizard');
+  const glary = (d: number) => [m(shuckle, d), m(other, d + STEADY_CLEAR + 4), m(far, 110)];
+  // one look is never enough, and each of these is past CLOSE on its own
+  assert.ok(glary(CLOSE + 8)[0].distance > CLOSE);
+  assert.equal(settleOverLooks([glary(CLOSE + 8)]), null);
+  const v = settleOverLooks([glary(CLOSE + 8), glary(CLOSE + 2), glary(CLOSE + 10)])!.picture;
+  assert.equal(v.best.card.id, 'sm8-16');
+  assert.equal(v.clear, true);
+  // a look where it wasn't found (looks with nothing) don't count
+  assert.equal(settleOverLooks([[], glary(CLOSE + 8)]), null);
+});
+
+test('over several looks: too far, too close a runner-up, or looks that disagree settle nothing', () => {
+  const a = card('a-1', 'Pikachu');
+  const b = card('b-1', 'Raichu');
+  const z = card('z-1', 'Zubat');
+  assert.equal(settleOverLooks([[m(a, STEADY_CLOSE + 6), m(z, 120)], [m(a, STEADY_CLOSE + 6), m(z, 120)]]), null, 'too far');
+  assert.equal(settleOverLooks([[m(a, 60), m(b, 66)], [m(a, 60), m(b, 66)]]), null, 'runner-up too close');
+  // Pikachu first in one look, Raichu in the next: averaged, neither is clear
+  assert.equal(settleOverLooks([[m(a, 60), m(b, 90)], [m(b, 60), m(a, 90)]]), null);
+});
+
+test('over several looks: a reprint is settled by the picture only when one printing is clearly closer', () => {
+  const base = card('base1-58', 'Pikachu');
+  const reprint = card('base4-87', 'Pikachu');
+  const z = card('z-1', 'Zubat');
+  const looks = (margin: number) => [0, 1].map(() => [m(base, 50), m(reprint, 50 + margin), m(z, 120)]);
+  assert.equal(settleOverLooks(looks(REPRINT_MARGIN + 2))?.picture.best.card.id, 'base1-58');
+  assert.equal(settleOverLooks(looks(REPRINT_MARGIN + 2))?.picture.twins.length, 0);
+  // …and the reading built from it is sure of that printing
+  const settled = settleOverLooks(looks(REPRINT_MARGIN + 2))!;
+  const pika = { names: ['Pikachu'], number: null, total: null, setCode: null, artist: null };
+  const candidates = identifyCard(cat, pika, 5, settled.matches);
+  assert.equal(candidates[0].card.id, 'base1-58');
+  assert.equal(settleOverLooks(looks(REPRINT_MARGIN - 4)), null, 'too close: the printed number has to say');
 });

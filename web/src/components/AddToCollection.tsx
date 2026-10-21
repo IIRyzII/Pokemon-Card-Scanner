@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { entryFor } from '../../../shared/copies.ts';
 import { gradeText } from '../../../shared/grading.ts';
+import { languageLabel } from '../../../shared/languages.ts';
 import { preferPrintings } from '../../../shared/printings.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import type { CardDetailResponse, CardInfo, ItemFields } from '../../../shared/types.ts';
@@ -93,6 +94,7 @@ export function AddToCollection({ card, detail, onClose }: Props) {
     ['Card', `${card.name}`],
     ['Set', `${card.setName} · #${number}`],
     ['Printing', variantLabel(fields.variant)],
+    ['Language', languageLabel(fields.language)],
     ['Grade', fields.grader === 'RAW' ? `Raw · ${conditionLabel(fields.condition)}` : gradeText(fields.grader, fields.grade, fields.gradeLabel)],
     ['Quantity', String(fields.quantity)],
   ];

@@ -34,6 +34,7 @@ export function toItem(r: Row): CollectionItem {
     image: s(r.image),
     dexId: n(r.dex_id),
     variant: String(r.variant),
+    language: s(r.language) ?? 'en',
     grader: String(r.grader),
     grade: n(r.grade),
     gradeLabel: s(r.grade_label),

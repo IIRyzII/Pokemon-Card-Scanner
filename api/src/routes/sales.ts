@@ -35,7 +35,10 @@ sales.post('/', requireRole('editor'), async (c) => {
   const price = number(body.price, 'Price', { min: 0, max: 10_000_000 })!;
   const currency = oneOf(body.currency ?? homeCurrency(c.env), CURRENCIES, 'Currency')!;
   const soldOn = isoDate(body.soldOn ?? todayIso(), 'Sold date')!;
-  if (soldOn > todayIso()) throw new HttpError(400, "The sold date can't be in the future");
+  // The app sends the user's local date, which can already be tomorrow in UTC (in the UK just after
+  // midnight in summer, in Australia for half the day): allow any date that's today somewhere.
+  const latestToday = new Date(Date.now() + 14 * 3_600_000).toISOString().slice(0, 10);
+  if (soldOn > latestToday) throw new HttpError(400, "The sold date can't be in the future");
   const source = text(body.source, 'Source', { optional: true, max: 40 }) ?? 'eBay';
   const url = httpUrl(body.url, 'Listing link');
   const note = text(body.note, 'Note', { optional: true, max: 300 });

@@ -3,6 +3,7 @@
 import { Hono } from 'hono';
 import { entryFor, planMerges } from '../../../shared/copies.ts';
 import { CURRENCIES, convert } from '../../../shared/currency.ts';
+import { DEFAULT_LANGUAGE, LANGUAGE_CODES } from '../../../shared/languages.ts';
 import { CONDITIONS, GRADERS, GRADE_LABELS, VARIANTS, isGrade } from '../../../shared/grading.ts';
 import {
   hasRole,
@@ -44,6 +45,7 @@ function parseItemFields(body: Record<string, unknown>, home: string, current?: 
   }
   return {
     variant,
+    language: oneOf(pick('language') ?? DEFAULT_LANGUAGE, LANGUAGE_CODES, 'Language')!,
     grader,
     grade,
     gradeLabel,
@@ -166,9 +168,9 @@ collection.post('/', requireRole('editor'), async (c) => {
       )
     : c.env.DB.prepare(
         `INSERT INTO collection_items (id, card_id, name, set_id, set_name, number, set_total, rarity, artist, image, dex_id,
-           variant, grader, grade, grade_label, condition, quantity, purchase_price, purchase_currency, purchase_date,
+           variant, language, grader, grade, grade_label, condition, quantity, purchase_price, purchase_currency, purchase_date,
            cert_number, notes, added_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         id,
         card.id,
@@ -182,6 +184,7 @@ collection.post('/', requireRole('editor'), async (c) => {
         card.image,
         card.dexId,
         fields.variant,
+        fields.language,
         fields.grader,
         fields.grade,
         fields.gradeLabel,
@@ -229,11 +232,12 @@ collection.patch('/:id', requireRole('editor'), async (c) => {
   );
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `UPDATE collection_items SET variant = ?, grader = ?, grade = ?, grade_label = ?, condition = ?, quantity = ?,
+      `UPDATE collection_items SET variant = ?, language = ?, grader = ?, grade = ?, grade_label = ?, condition = ?, quantity = ?,
          purchase_price = ?, purchase_currency = ?, purchase_date = ?, cert_number = ?, notes = ?, updated_at = ?
        WHERE id = ?`,
     ).bind(
       fields.variant,
+      fields.language,
       fields.grader,
       fields.grade,
       fields.gradeLabel,

@@ -40,6 +40,8 @@ export interface SaleRow {
 
 export interface ItemLike {
   variant: string;
+  /** Language code; English when left out */
+  language?: string | null;
   grader: string;
   grade: number | null;
   gradeLabel: string | null;
@@ -135,18 +137,24 @@ export function valueItem(item: ItemLike, prices: PriceRow[], sales: SaleRow[], 
 
   if (item.grader === 'RAW') {
     const cmVariant = cardmarketVariant(item.variant);
-    return (
+    const english = (item.language ?? 'en') === 'en';
+    const tcgplayer = () =>
       fromRow(
         prices.find((p) => p.source === 'tcgplayer' && p.variant === item.variant && p.market != null),
         'tcgplayer',
-        'TCGplayer market price',
-      ) ??
-      fromRow(pcRow('ungraded'), 'pricecharting', 'PriceCharting ungraded') ??
+        english ? 'TCGplayer market price' : 'TCGplayer market price (English copies)',
+      );
+    const priceCharting = () => fromRow(pcRow('ungraded'), 'pricecharting', 'PriceCharting ungraded');
+    const cardmarket = () =>
       fromRow(
         cmVariant ? prices.find((p) => p.source === 'cardmarket' && p.variant === cmVariant && p.market != null) : undefined,
         'cardmarket',
-        'Cardmarket trend',
-      ) ??
+        'Cardmarket trend (all languages)',
+      );
+    // TCGplayer only sells English copies; French, German and the rest trade on Cardmarket, whose
+    // price covers every language.
+    return (
+      (english ? (tcgplayer() ?? priceCharting() ?? cardmarket()) : (cardmarket() ?? tcgplayer() ?? priceCharting())) ??
       (sold.length ? fromSales(recentSold.length ? recentSold : sold) : null) ??
       result(null, null, 'No raw price yet')
     );

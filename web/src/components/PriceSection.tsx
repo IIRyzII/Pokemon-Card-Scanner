@@ -109,7 +109,7 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
   );
   const chartLabel = graded
     ? `${gradeText(focus!.grader, focus!.grade, focus!.gradeLabel)} · ${variantLabel(variant)}`
-    : `Raw · ${variantLabel(variant)} (${rawSource === 'tcgplayer' ? 'TCGplayer market' : 'Cardmarket trend'})`;
+    : `Raw · ${variantLabel(variant)} (${rawSource === 'tcgplayer' ? 'TCGplayer market, English' : 'Cardmarket trend, all languages'})`;
   const converted = prices.some((p) => p.currency !== currency) || sales.some((s) => s.currency !== currency);
 
   async function refresh() {
@@ -178,7 +178,7 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
               {tcg.map((p) => (
                 <tr key={`t${p.variant}${p.label}`} className={!graded && focus && p.variant === focus.variant ? 'hl' : ''}>
                   <td>
-                    {variantLabel(p.variant)} <span className="faint small">TCGplayer</span>
+                    {variantLabel(p.variant)} <span className="faint small">TCGplayer · English</span>
                   </td>
                   <td>
                     <strong>{format(p.market, p.currency)}</strong>
@@ -190,7 +190,7 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
               {cm.map((p) => (
                 <tr key={`c${p.variant}`}>
                   <td>
-                    {p.variant === 'holo' ? 'Holo / reverse' : 'Main'} <span className="faint small">Cardmarket</span>
+                    {p.variant === 'holo' ? 'Holo / reverse' : 'Main'} <span className="faint small">Cardmarket · all languages</span>
                   </td>
                   <td>
                     <strong>{format(p.market, p.currency)}</strong>

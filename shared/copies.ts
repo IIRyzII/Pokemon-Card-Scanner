@@ -7,13 +7,14 @@ import type { ItemFields } from './types.ts';
 export const MAX_QUANTITY = 999;
 
 /**
- * Copies that can share an entry: the same printing and condition or grade, bought at the same
+ * Copies that can share an entry: the same printing, language and condition or grade, bought at the same
  * price on the same date, with the same notes (all usually blank). A slab with a cert number is
  * one specific copy, so it always has an entry of its own.
  */
 export function sameCopy(a: ItemFields, b: ItemFields): boolean {
   return (
     a.variant === b.variant &&
+    (a.language ?? 'en') === (b.language ?? 'en') &&
     a.grader === b.grader &&
     (a.grade ?? null) === (b.grade ?? null) &&
     (a.gradeLabel ?? null) === (b.gradeLabel ?? null) &&

@@ -69,6 +69,8 @@ export interface CardInfo {
 
 export interface ItemFields {
   variant: string;
+  /** The language it's printed in (a LANGUAGES code: en, fr, de…) */
+  language: string;
   grader: string;
   grade: number | null;
   gradeLabel: string | null;

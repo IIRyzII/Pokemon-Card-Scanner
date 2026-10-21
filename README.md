@@ -4,7 +4,7 @@ A phone-friendly web app for tracking a Pokémon card collection:
 
 - **Scan** a card with your phone camera: hold it in view, at any angle, and **auto-scan** recognises it by its picture, usually in under a second (or tap the shutter, or use a photo). Or **search** by name / set / number (`charizard 4/102`).
 - **Scan a stack**: switch the scanner to **Stack of cards** and show your cards one after another. Each card found goes in a list and the camera carries on with the next one. Then check the list (printing, condition, quantity, estimated value) and add every card at once.
-- **Confirm before adding**: pick the printing (normal, holo, reverse, 1st edition), raw condition or graded slab (PSA, BGS, CGC, SGC, TAG, ACE), quantity and what you paid, then review and confirm.
+- **Confirm before adding**: pick the printing (normal, holo, reverse, 1st edition), the **language** it's printed in (English, French, German, Italian, Spanish or Portuguese), raw condition or graded slab (PSA, BGS, CGC, SGC, TAG, ACE), quantity and what you paid, then review and confirm.
 - **Duplicates share one entry**: another copy of a card you already have (same printing and condition or grade) is counted with it, so you see one entry ×2, not two entries. Copies with a different price paid, purchase date, notes or a cert number keep their own entry, so those details aren't lost.
   - **Dupes** (next to All / Raw / Graded) shows only the cards you have more than one of, with how many spare copies that is and what they're worth (keeping your most valuable copy of each): your trade pile.
   - Sort by **Copies: most → least** to see the cards you have most of first, each with its total copies and value.
@@ -18,6 +18,7 @@ A phone-friendly web app for tracking a Pokémon card collection:
   - On a big screen, pages sit side by side like the open binder, page 1 opposite the inside cover.
 - Every card shows its **image, name, set, number** and **price**. Totals for the whole collection are at the top.
 - **Raw prices** (TCGplayer + Cardmarket) refresh when you open the app, and the app keeps its **own price history**.
+  - **Language**: TCGplayer only sells English cards, so English copies are valued from it. French, German, Italian, Spanish and Portuguese copies are valued from Cardmarket, where those languages trade. Neither gives a price per language: Cardmarket's covers a card in any language, and the app says so ("Cardmarket trend (all languages)"). Japanese, Korean and Chinese cards come from their own sets, which the catalog doesn't include.
 - **Your currency**: everything is shown in **GBP** by default. Anyone can switch to USD, EUR, CAD or AUD under **Account → Currency**.
   - Prices are converted with the European Central Bank's daily rates.
   - Logged sales and purchase prices remember the currency they were entered in.
@@ -152,6 +153,8 @@ The API enforces roles on every request, so hiding a button in the app is never 
 - The scanner outlines the card it has found, straightens it, and compares its picture with every card in the catalog several times a second.
 - **Auto-scan** is on by default, so you don't need to press anything.
   - A close, clear picture match is picked straight away, usually in under a second, upside down too. You don't need to hold still: a little hand shake or blur doesn't stop the picture matching.
+  - **Glare** (a lamp on a holo, a shiny sleeve) and shaky hands can keep any single look from being sure, even though the right card still looks closest. So the scanner also compares the last few looks, and picks the card that stays clearly closest across them. Tilting the card a little helps, as the glare moves. In tests with hard glare and shake on 120 cards, the share found within about half a second went from 80% to 92%, without a wrong card picked.
+  - Reprints that share their artwork are told apart the same way when the picture shows one printing clearly closer (a different border, say). Only when it can't is the printed number read, which needs the card held still.
   - Reprints share their artwork with other printings (Base Set and Base Set 2 Charizard, say), so the scanner then reads the printed number or set to tell which one you have. It only reads the name line at the top and the corner with the number at the bottom, never the moves. That small print needs a sharp picture, so it asks you to hold still for a moment ("Looks like Charizard. Hold it still a moment…"); the outline turns green when it's still enough.
   - It never picks a card it isn't sure of. If it can't be, it keeps trying on new frames; tap the shutter to see the closest matches yourself.
   - **Scan again** won't pick up the same card while it's still in view. Swap in the next card and it carries on.

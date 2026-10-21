@@ -142,7 +142,9 @@ export function AccountPage() {
           </li>
           <li>
             Raw market prices: TCGplayer (USD) and Cardmarket (EUR), refreshed by the PokéVault API when you open the app
-            (and daily in the background), which keeps its own price history, and converted to your currency.
+            (and daily in the background), which keeps its own price history, and converted to your currency. TCGplayer only
+            sells English cards, so English copies are valued from it; French, German, Italian, Spanish and Portuguese copies
+            from Cardmarket, whose price covers a card in any language (it doesn&apos;t give one per language).
           </li>
           <li>
             Graded prices: eBay sold prices logged in the app, plus PriceCharting

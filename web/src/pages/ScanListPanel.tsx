@@ -1,6 +1,7 @@
 // The scan list: check the cards scanned from a stack, then add them all to the collection at once.
 
 import { useEffect, useRef, useState } from 'react';
+import { languageLabel } from '../../../shared/languages.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import { preferPrintings } from '../../../shared/printings.ts';
 import type { CardDetailResponse, ItemFields } from '../../../shared/types.ts';
@@ -222,6 +223,7 @@ function Entry({ entry, value, currency, owned, checking, busy, onEdit }: EntryP
         </div>
         <div className="small">
           {checking ? <span className="faint">Checking printings…</span> : variantLabel(fields.variant)} · {gradeBadge(fields)}
+          {fields.language && fields.language !== 'en' && ` · ${languageLabel(fields.language)}`}
           {owned > 0 && <span className="faint"> · you have {owned}</span>}
         </div>
         {entry.error && <p className="error small">{entry.error}</p>}

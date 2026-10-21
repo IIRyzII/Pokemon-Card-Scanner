@@ -9,6 +9,7 @@ const now = new Date('2026-10-14T12:00:00Z');
 const fx: FxRates = { date: '2026-10-14', perEur: { EUR: 1, USD: 1.1195, GBP: 0.84385 } };
 const USD = { currency: 'USD', fx };
 const GBP = { currency: 'GBP', fx };
+const EUR = { currency: 'EUR', fx };
 
 const price = (p: Partial<PriceRow>): PriceRow => ({
   source: 'tcgplayer',
@@ -147,4 +148,20 @@ test('links', () => {
   assert.ok(ebaySoldUrl(ref, 'RAW', null, null, 'www.ebay.co.uk').startsWith('https://www.ebay.co.uk/sch/'));
   assert.equal(artistSlug('Mitsuhiro Arita'), 'mitsuhiro-arita');
   assert.equal(artistSlug('Dr.Ooyama'), 'dr-ooyama');
+});
+
+test("English copies are valued from TCGplayer (English only), other languages from Cardmarket (any language)", () => {
+  const prices = [
+    price({ source: 'tcgplayer', variant: 'normal', market: 0.5, currency: 'USD' }),
+    price({ source: 'cardmarket', variant: 'main', market: 0.2, currency: 'EUR' }),
+  ];
+  const copy = (language?: string) => ({ variant: 'normal', language, grader: 'RAW', grade: null, gradeLabel: null });
+  const english = valueItem(copy('en'), prices, [], USD, now);
+  assert.deepEqual([english.unit, english.source, english.detail], [0.5, 'tcgplayer', 'TCGplayer market price']);
+  assert.equal(valueItem(copy(), prices, [], USD, now).source, 'tcgplayer', 'no language: English');
+  const french = valueItem(copy('fr'), prices, [], EUR, now);
+  assert.deepEqual([french.unit, french.source, french.detail], [0.2, 'cardmarket', 'Cardmarket trend (all languages)']);
+  // No Cardmarket price: TCGplayer's, saying it's for English copies
+  const german = valueItem(copy('de'), prices.slice(0, 1), [], USD, now);
+  assert.deepEqual([german.unit, german.detail], [0.5, 'TCGplayer market price (English copies)']);
 });

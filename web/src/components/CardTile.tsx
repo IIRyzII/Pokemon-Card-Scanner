@@ -1,4 +1,5 @@
 import { CONDITION_LABELS, VARIANT_LABELS, gradeText, type Condition, type Variant } from '../../../shared/grading.ts';
+import { LANGUAGES, languageLabel, type Language } from '../../../shared/languages.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import type { CollectionItem } from '../../../shared/types.ts';
 import type { CatalogCard } from '../lib/catalog.ts';
@@ -31,6 +32,11 @@ export function ItemTile({ item, artist }: { item: CollectionItem; artist?: stri
         <div className="tile-badges">
           {graded && <span className="badge grade">{gradeBadge(item)}</span>}
           {item.variant !== 'normal' && item.variant !== 'holo' && <span className="badge">{variantLabel(item.variant)}</span>}
+          {item.language && item.language !== 'en' && (
+            <span className="badge" title={languageLabel(item.language)}>
+              {LANGUAGES[item.language as Language]?.short ?? item.language}
+            </span>
+          )}
         </div>
         {item.quantity > 1 && <span className="badge qty">×{item.quantity}</span>}
       </div>

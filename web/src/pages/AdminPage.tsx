@@ -137,7 +137,7 @@ export function AdminPage() {
   }
 
   function exportCsv() {
-    const cols = ['name', 'setName', 'number', 'setTotal', 'variant', 'grader', 'grade', 'gradeLabel', 'condition', 'quantity', 'value', 'valueCurrency', 'valueSource', 'purchasePrice', 'purchaseCurrency', 'purchaseDate', 'certNumber', 'artist', 'rarity', 'notes', 'cardId', 'createdAt'] as const;
+    const cols = ['name', 'setName', 'number', 'setTotal', 'variant', 'language', 'grader', 'grade', 'gradeLabel', 'condition', 'quantity', 'value', 'valueCurrency', 'valueSource', 'purchasePrice', 'purchaseCurrency', 'purchaseDate', 'certNumber', 'artist', 'rarity', 'notes', 'cardId', 'createdAt'] as const;
     const rows = (data?.items ?? []).map((i) => cols.map((c) => csvCell(i[c])).join(','));
     downloadFile(`pokevault-collection-${todayIso()}.csv`, [cols.join(','), ...rows].join('\n'), 'text/csv');
   }

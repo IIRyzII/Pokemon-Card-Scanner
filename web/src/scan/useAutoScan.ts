@@ -1,12 +1,13 @@
 // Auto-scan: while the camera is live, keep finding the card (and outline it on screen) and
-// recognise it by its picture on every look — a little movement or blur doesn't matter for that —
+// recognise it by its picture on every look — a little movement or blur doesn't matter for that,
+// and when glare or blur keeps single looks from being sure, the last few looks together can be —
 // reading its text when the picture can't settle it, and pick it as soon as that's certain,
 // without waiting for the shutter button.
 
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { Catalog } from '../lib/catalog.ts';
 import { nameMatch, type ScanGuess } from '../lib/match.ts';
-import { CERTAIN } from '../lib/pictures.ts';
+import { CERTAIN, LOOKS, settleOverLooks, type PictureMatch } from '../lib/pictures.ts';
 import { loadPrintIndex } from '../lib/useCatalog.ts';
 import type { Corners, Point } from './detect.ts';
 import { cornerShift, locateCard, smallCard, straightenCard, toCanvas, toElement } from './locate.ts';
@@ -118,6 +119,7 @@ export function useAutoScan({ active, catalog, video, frame, onFound, keepGoing 
       let checks = 0; // reads in a row that knew the card by its picture but not which printing
       let streakId: string | null = null; // the card the last look's picture clearly matched…
       let streak = 0; // …and how many looks in a row it has
+      let recent: PictureMatch[][] = []; // the last few looks' closest pictures, for settling over them
       // Scanning a stack: the card just found is still in view (also when the camera restarts after
       // one was put in the list by hand)…
       let leaving = keep.current && lastFound !== null;
@@ -153,21 +155,34 @@ export function useAutoScan({ active, catalog, video, frame, onFound, keepGoing 
           if (index) {
             const small = smallCard(detection);
             const { matches, flipped, picture } = matchPicture(index, small);
+            recent = [...recent, matches].slice(-LOOKS);
+            // Settled by the picture we just matched. (Grabbing a fresh frame now could catch the card
+            // somewhere else if it's moving.)
+            const image = () => toCanvas(flipped ? rotate180(small) : small);
+            // Glare or blur can keep every single look from being sure while the same card stays
+            // closest: the last few looks together can settle it (reprints included, when one
+            // printing is clearly closer).
+            const settled = () => (performance.now() >= restUntil ? settleOverLooks(recent) : null);
             if (picture?.clear && !picture.twins.length) {
               // One card: certain at once if the match is very close, else once it comes up twice running.
               streak = picture.best.card.id === streakId ? streak + 1 : 1;
               streakId = picture.best.card.id;
               if ((picture.best.distance > CERTAIN && streak < 2) || performance.now() < restUntil) {
-                show({ state: 'seen', text: picture.best.card.name });
-                continue;
+                const over = settled();
+                if (!over) {
+                  show({ state: 'seen', text: picture.best.card.name });
+                  continue;
+                }
+                reading = readingFromPicture(catalog, over.matches, over.picture, image());
+              } else {
+                reading = readingFromPicture(catalog, matches, picture, image());
               }
-              // Settled by the picture we just matched. (Grabbing a fresh frame now could catch the card
-              // somewhere else if it's moving.)
-              reading = readingFromPicture(catalog, matches, picture, toCanvas(flipped ? rotate180(small) : small));
             } else {
               streak = 0;
               streakId = null;
-              if (picture?.clear) show({ state: 'checking', name: picture.best.card.name }); // a reprint: the number decides
+              const over = settled();
+              if (over) reading = readingFromPicture(catalog, over.matches, over.picture, image());
+              else if (picture?.clear) show({ state: 'checking', name: picture.best.card.name }); // a reprint: the number decides
               else if (!still) show({ state: 'moving' });
             }
           } else if (!still) {
@@ -182,6 +197,7 @@ export function useAutoScan({ active, catalog, video, frame, onFound, keepGoing 
           corners = null;
           streak = 0;
           streakId = null;
+          recent = [];
           setOutline(null);
           if (leaving && ++gone >= GONE_LOOKS) {
             leaving = false;
@@ -231,6 +247,7 @@ export function useAutoScan({ active, catalog, video, frame, onFound, keepGoing 
           paused = true;
           leaving = true;
           gone = 0;
+          recent = []; // the next card starts afresh
           show({ state: 'repeat', name: top.card.name });
           continue;
         }

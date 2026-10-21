@@ -156,13 +156,20 @@ try {
     assert.equal(again.data.item.id, pikachuId, 'the same entry');
     assert.equal(again.data.item.quantity, 3);
     const separate = [];
-    for (const differs of [{ condition: 'LP' }, { purchasePrice: 4.5 }]) {
+    for (const differs of [{ condition: 'LP' }, { purchasePrice: 4.5 }, { language: 'fr' }]) {
       const { data } = await api('POST', '/api/collection', { token: B, body: { ...pika, ...differs }, expect: 201 });
       assert.equal(data.merged, false, JSON.stringify(differs));
       separate.push(data.item.id);
+      if (differs.language) {
+        // A French copy: valued from Cardmarket (any language), not TCGplayer (English only)
+        assert.deepEqual([data.item.language, data.item.valueSource], ['fr', 'cardmarket'], JSON.stringify(data.item));
+        assert.match(data.item.valueDetail, /all languages/);
+      }
     }
+    assert.equal(again.data.item.language, 'en', 'copies added before languages count as English');
+    await api('POST', '/api/collection', { token: B, body: { ...pika, language: 'jp' }, expect: 400 });
     const list = await api('GET', '/api/collection', { token: B, expect: 200 });
-    assert.equal(list.data.items.filter((i) => i.cardId === 'sv03.5-025').length, 3);
+    assert.equal(list.data.items.filter((i) => i.cardId === 'sv03.5-025').length, 4);
     for (const id of separate) {
       await api('DELETE', `/api/collection/${id}`, { token: B, expect: 200 });
       await api('DELETE', `/api/collection/${id}/purge`, { token: A, expect: 200 });
