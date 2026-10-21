@@ -1,5 +1,6 @@
 // On-device card reading with Tesseract (OCR runs in the browser; photos never leave the phone).
-// We read two strips of the card — the name at the top and the number/set code at the bottom.
+// Only two small parts of the card are read: the name line at the top and the corner with the
+// card number at the bottom. The moves in between are never read.
 
 import { createWorker, OEM, PSM, type OutputFormats, type Page, type Worker } from 'tesseract.js';
 import type { ScanGuess } from '../lib/match.ts';
@@ -33,10 +34,37 @@ export interface ScanOptions {
   signal?: AbortSignal;
   /** For auto-scan: stop after the name strip when it has no real words or HP (no card in view). */
   quick?: boolean;
+  /**
+   * The image is exactly the card, edge to edge (found in the picture and straightened), so the
+   * name and number are right where they're printed. Otherwise (just the guide frame) the
+   * number areas are taller, as the card may sit a little off.
+   */
+  fitted?: boolean;
+  /**
+   * Auto-scan read this card a moment ago without finding out which printing it is: if the
+   * number doesn't read again, also try a second view of its corners.
+   */
+  retry?: boolean;
 }
 
-/** Copies part of the card (fractions of its size) into a new canvas, scaled and contrast-boosted. */
-function strip(card: HTMLCanvasElement, x: number, y: number, w: number, h: number, targetWidth: number): HTMLCanvasElement {
+/** Part of the card: [left, top, width, height] as fractions of its size. */
+type Box = readonly [number, number, number, number];
+
+// Measured on cards from every era, Base Set to Mega Evolution:
+/** The name line, with the HP at its right. */
+const NAME: Box = [0.02, 0.012, 0.96, 0.11];
+/** The card number and set code: bottom-left on cards since Sun & Moon (2017)… */
+const NUMBER_LEFT: Box = [0, 0.9, 0.5, 0.095];
+/** …and bottom-right before that. */
+const NUMBER_RIGHT: Box = [0.5, 0.9, 0.5, 0.095];
+/** The same corners, taller: the second view, which some small print only reads in. */
+const NUMBER_LEFT_TALL: Box = [0, 0.84, 0.5, 0.16];
+const NUMBER_RIGHT_TALL: Box = [0.5, 0.84, 0.5, 0.16];
+/** Taller, for when the card might sit a little off (only the guide frame was cut out). */
+const loose = ([x, y, w, h]: Box): Box => [x, Math.max(0, y - 0.08), w, Math.min(1, y + h) - Math.max(0, y - 0.08)];
+
+/** Copies part of the card into a new canvas, scaled and contrast-boosted. */
+function strip(card: HTMLCanvasElement, [x, y, w, h]: Box, targetWidth: number): HTMLCanvasElement {
   const sx = Math.round(card.width * x);
   const sy = Math.round(card.height * y);
   const sw = Math.max(1, Math.round(card.width * w));
@@ -128,49 +156,51 @@ export function scanCard(card: HTMLCanvasElement, options: ScanOptions = {}): Pr
   });
 }
 
-async function readCard(worker: Worker, card: HTMLCanvasElement, { onProgress, signal, quick }: ScanOptions): Promise<ScanResult> {
+async function readCard(worker: Worker, card: HTMLCanvasElement, { onProgress, signal, quick, fitted, retry }: ScanOptions): Promise<ScanResult> {
   const step = (label: string) => {
     checkAbort(signal);
     onProgress?.(label);
   };
   step('Reading the name…');
-  await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK, tessedit_char_whitelist: '' });
-  const top = await readStrip(worker, strip(card, 0.02, 0.01, 0.96, 0.12, 1000), { text: true, blocks: !!quick });
+  // A local black/white threshold (Sauvola): the default one cuts the whole strip at a single
+  // brightness, which turns a name banner or the number's coloured border black along with its
+  // text whenever bright artwork shares the strip. This reads the number on twice as many cards.
+  await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK, thresholding_method: '2' });
+  const top = await readStrip(worker, strip(card, NAME, 1500), { text: true, blocks: !!quick });
   const topText = top.data.text;
   if (quick && !hasRealWord(top.data) && !parseHp(topText)) {
     // Only texture where the name should be: most likely no card in the frame yet.
     return { guess: buildGuess('', ''), topText, bottomText: '' };
   }
-  step('Reading the card number…');
-  await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
-  const bottom = await readStrip(worker, strip(card, 0, 0.84, 1, 0.16, 1600));
-  let bottomText = bottom.data.text;
-  let guess = buildGuess(topText, bottomText);
 
-  if (!guess.number) {
-    // The number is tiny: bottom-right on older cards ("4/102"), bottom-left on newer ones
-    // ("MEW EN 025/165"). Zoom into each corner and read digits only.
-    step('Looking closer at the number…');
-    await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: '0123456789/' });
-    const corners: [number, number, number, number][] = [
-      [0.55, 0.9, 0.45, 0.1],
-      [0, 0.86, 0.55, 0.12],
-    ];
-    for (const [x, y, w, h] of corners) {
-      checkAbort(signal);
-      const r = await readStrip(worker, strip(card, x, y, w, h, 1400));
-      bottomText += `\n${r.data.text}`;
-      guess = buildGuess(topText, bottomText);
+  step('Reading the card number…');
+  let bottomText = '';
+  let guess = buildGuess(topText, '');
+  const read = async (box: Box) => {
+    checkAbort(signal);
+    const r = await readStrip(worker, strip(card, box, 1100));
+    bottomText += `${r.data.text}\n`;
+    guess = buildGuess(topText, bottomText);
+  };
+  // Newer cards first (bottom-left); the bottom-right corner only if the number wasn't there.
+  // (Read as one block: sparse-text mode skips the number when it sits between the set symbol
+  // and the boxed regulation mark.) Very small print, from a card far from the camera, can come
+  // out better with the single threshold, so the corners get a second go with that.
+  for (const threshold of ['2', '0']) {
+    await worker.setParameters({ thresholding_method: threshold });
+    for (const box of [NUMBER_LEFT, NUMBER_RIGHT]) {
+      await read(fitted ? box : loose(box));
+      if (guess.number) break;
+    }
+    if (guess.number || guess.alternatives?.length) break;
+  }
+  if (retry && fitted && !guess.number && !guess.alternatives?.length) {
+    // No luck a moment ago either: this time also try the corners taller, as sparse text.
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, thresholding_method: '0' });
+    for (const box of [NUMBER_LEFT_TALL, NUMBER_RIGHT_TALL]) {
+      await read(box);
       if (guess.number || guess.alternatives?.length) break;
     }
-    await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, tessedit_char_whitelist: '' });
-  }
-  if (!guess.number && !guess.alternatives?.length) {
-    // The card may sit a little high/low in the frame — try a taller strip.
-    step('Looking harder…');
-    const wide = await readStrip(worker, strip(card, 0, 0.74, 1, 0.26, 1600));
-    bottomText += `\n${wide.data.text}`;
-    guess = buildGuess(topText, bottomText);
   }
   return { guess, topText, bottomText };
 }

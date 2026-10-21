@@ -139,7 +139,7 @@ The API enforces roles on every request, so hiding a button in the app is never 
 - The scanner outlines the card it has found, straightens it, and compares its picture with every card in the catalog several times a second.
 - **Auto-scan** is on by default, so you don't need to press anything.
   - A close, clear picture match is picked straight away, usually in under a second, upside down too. You don't need to hold still: a little hand shake or blur doesn't stop the picture matching.
-  - Reprints share their artwork with other printings (Base Set and Base Set 2 Charizard, say), so the scanner then reads the printed number or set to tell which one you have. That small print needs a sharp picture, so it asks you to hold still for a moment ("Looks like Charizard. Hold it still a moment…"); the outline turns green when it's still enough.
+  - Reprints share their artwork with other printings (Base Set and Base Set 2 Charizard, say), so the scanner then reads the printed number or set to tell which one you have. It only reads the name line at the top and the corner with the number at the bottom, never the moves. That small print needs a sharp picture, so it asks you to hold still for a moment ("Looks like Charizard. Hold it still a moment…"); the outline turns green when it's still enough.
   - It never picks a card it isn't sure of. If it can't be, it keeps trying on new frames; tap the shutter to see the closest matches yourself.
   - **Scan again** won't pick up the same card while it's still in view. Swap in the next card and it carries on.
   - Turn it off with the **Auto-scan** button under the camera. The app remembers your choice.

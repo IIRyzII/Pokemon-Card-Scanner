@@ -49,7 +49,7 @@ export function readingFromPicture(catalog: Catalog, pictures: PictureMatch[], p
   return { image, pictures, picture, ocr: null, candidates, confidence };
 }
 
-export interface ReadOptions extends Pick<ScanOptions, 'signal' | 'onProgress'> {
+export interface ReadOptions extends Pick<ScanOptions, 'signal' | 'onProgress' | 'retry'> {
   catalog: Catalog;
   index: PrintIndex | null;
   /** The straightened card, or (card not found) a canvas of the guide frame */
@@ -58,7 +58,7 @@ export interface ReadOptions extends Pick<ScanOptions, 'signal' | 'onProgress'> 
   quick?: boolean;
 }
 
-export async function readCard({ catalog, index, card, quick, signal, onProgress }: ReadOptions): Promise<Reading> {
+export async function readCard({ catalog, index, card, quick, retry, signal, onProgress }: ReadOptions): Promise<Reading> {
   let image = card instanceof HTMLCanvasElement ? card : card.canvas;
   let pictures: PictureMatch[] | null = null;
   let picture: PictureVerdict | null = null;
@@ -74,7 +74,7 @@ export async function readCard({ catalog, index, card, quick, signal, onProgress
     }
     if (picture?.clear && !picture.twins.length) return readingFromPicture(catalog, pictures, picture, image);
   }
-  const ocr = await scanCard(image, { quick, signal, onProgress });
+  const ocr = await scanCard(image, { quick, retry, signal, onProgress, fitted: !(card instanceof HTMLCanvasElement) });
   const candidates = identifyCard(catalog, ocr.guess, 12, pictures);
   return { image, pictures, picture, ocr, candidates, confidence: matchConfidence(ocr.guess, candidates, picture) };
 }

@@ -107,6 +107,7 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
       let paused = false; // re-found the last card: wait for it to move before reading again
       let restUntil = 0;
       let misses = 0; // reads in a row that found nothing, to slow down when there's no card
+      let checks = 0; // reads in a row that knew the card by its picture but not which printing
       let streakId: string | null = null; // the card the last look's picture clearly matched…
       let streak = 0; // …and how many looks in a row it has
 
@@ -128,6 +129,7 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
           if (shift > MOVED) {
             paused = false;
             misses = 0;
+            checks = 0;
             if (performance.now() - started > SETTLE_MS) moved = true;
           }
           if (paused) continue;
@@ -183,7 +185,7 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
 
         if (!reading && card) {
           try {
-            reading = await readCard({ catalog, index, card, quick: true, signal });
+            reading = await readCard({ catalog, index, card, quick: true, retry: checks > 0, signal });
           } catch {
             releaseCanvas(card instanceof HTMLCanvasElement ? card : card.canvas);
             if (signal.aborted) return;
@@ -209,11 +211,13 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
         if (reading.picture?.clear) {
           // The picture knows the card; the text has to say which printing. Keep reading.
           misses = 0;
+          checks++;
           restUntil = performance.now() + 250;
           show({ state: 'checking', name: reading.picture.best.card.name });
           continue;
         }
         const seen = describe(reading);
+        checks = 0;
         misses = seen ? 0 : misses + 1;
         restUntil = performance.now() + (seen ? 250 : Math.min(800 * misses, 3000));
         show(seen ? { state: 'seen', text: seen } : { state: 'looking' });

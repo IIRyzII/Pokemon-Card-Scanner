@@ -95,3 +95,23 @@ test('bottom: OCR dropped the slash ("4102")', async () => {
   assert.deepEqual(slashlessReadings('025165'), [{ number: '025', total: 165 }]);
   assert.deepEqual(slashlessReadings('Fire Spin 100 HP 120 ©2023'), []);
 });
+
+test('bottom: number split over two lines', () => {
+  assert.deepEqual(pick(parseBottomText('Illus. motch 43/\n101 ◆')), ['43', 101]);
+});
+
+test('bottom: rarity symbol or set code read into the number', () => {
+  const r = parseBottomText('Illus. Masakazu Fukuda 98/1130');
+  assert.equal(r.number, null);
+  assert.deepEqual(r.alternatives, [{ number: '98', total: 113 }, { number: '98', total: 130 }]);
+  assert.deepEqual(parseBottomText('Mus. 5ban Graphics B6/146K').alternatives, [{ number: '86', total: 146 }]);
+  assert.deepEqual(parseBottomText('MEG EN153/1320').alternatives?.[0], { number: '153', total: 132 });
+  assert.deepEqual(pick(parseBottomText('Illus. Ken Sugimori 35/622')), [null, null]);
+  assert.deepEqual(parseBottomText('Illus. Ken Sugimori 35/622').alternatives, [{ number: '35', total: 62 }]);
+  assert.equal(parseBottomText('©2023 Pokémon / Nintendo / Creatures').alternatives, undefined);
+});
+
+test('bottom: no set is bigger than 300 cards', async () => {
+  const { slashlessReadings } = await import('./parse.ts');
+  assert.deepEqual(slashlessReadings('WW 251500'), []);
+});

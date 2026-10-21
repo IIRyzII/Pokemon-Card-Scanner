@@ -64,16 +64,20 @@ export interface BottomInfo {
   alternatives?: { number: string; total: number }[];
 }
 
+/** No set prints a size over 300 (the biggest, Fusion Strike, has 264): a bigger one is a misread. */
+const plausibleTotal = (total: number) => total >= 10 && total <= 300;
+
 /** "4102" → [{4, 102}], "025165" → [{025, 165}]; 4–6 digit runs only, years skipped. */
 export function slashlessReadings(text: string): { number: string; total: number }[] {
   const out: { number: string; total: number }[] = [];
-  // (No lookbehind: Safari before iOS 16.4 can't even load a file that contains one.)
-  for (const m of text.matchAll(/(?:^|[^0-9A-Za-z])([0-9]{4,6})(?![0-9A-Za-z])/g)) {
+  // (No lookbehind: Safari before iOS 16.4 can't even load a file that contains one. Runs right
+  // after a slash are totals, not numbers that lost theirs.)
+  for (const m of text.matchAll(/(?:^|[^0-9A-Za-z/])([0-9]{4,6})(?![0-9A-Za-z])/g)) {
     const digits = m[1];
     if (/^(19|20)\d\d$/.test(digits)) continue;
     for (let i = 1; i <= 3; i++) {
       const total = digits.slice(i);
-      if (total.length < 2 || total.length > 3 || parseInt(total, 10) < 10) continue;
+      if (total.length < 2 || total.length > 3 || !plausibleTotal(parseInt(total, 10))) continue;
       out.push({ number: digits.slice(0, i), total: parseInt(total, 10) });
     }
   }
@@ -101,12 +105,13 @@ export function parseBottomText(text: string): BottomInfo {
     return out;
   }
 
-  // Standard "025/165" — prefer a match whose total has 2+ digits.
-  const re = new RegExp(`(?:^|[^0-9A-Za-z])(${D}{1,3})\\s?\\/\\s?(${D}{2,3})(?![0-9A-Za-z])`, 'g');
+  // Standard "025/165" — prefer a match whose total has 2+ digits. (The text may break the line
+  // at the slash: "43/" then "101".)
+  const re = new RegExp(`(?:^|[^0-9A-Za-z])(${D}{1,3})\\s{0,3}\\/\\s{0,3}(${D}{2,3})(?![0-9A-Za-z])`, 'g');
   for (const m of flat.matchAll(re)) {
     const num = fixDigits(m[1]);
     const total = parseInt(fixDigits(m[2]), 10);
-    if (/^\d+$/.test(num) && total >= 10) {
+    if (/^\d+$/.test(num) && plausibleTotal(total)) {
       out.number = num;
       out.total = total;
       return out;
@@ -127,8 +132,28 @@ export function parseBottomText(text: string): BottomInfo {
     out.number = `${promo[1]}${fixDigits(promo[2])}`;
     return out;
   }
-  const alternatives = slashlessReadings(flat);
+  const alternatives = [...untidyReadings(flat), ...slashlessReadings(flat)];
   if (alternatives.length) out.alternatives = alternatives;
+  return out;
+}
+
+/**
+ * "98/1130", "B6/146K", "EN153/132", "35/622": the rarity symbol or set code read into the
+ * number, so it doesn't stand on its own. Offers it with the extra character dropped: from either
+ * end of a four-digit total (a misread slash can bring a "1" with it), or the end of a three-digit
+ * one too big to be a set's size.
+ */
+export function untidyReadings(text: string): { number: string; total: number }[] {
+  const out: { number: string; total: number }[] = [];
+  for (const m of text.matchAll(new RegExp(`(${D}{1,3})\\s{0,3}\\/\\s{0,3}(${D}{2,4})`, 'g'))) {
+    const number = fixDigits(m[1]);
+    const digits = fixDigits(m[2]);
+    if (!/^\d+$/.test(number) || !/^\d+$/.test(digits)) continue;
+    const totals = digits.length === 4 ? [digits.slice(0, 3), digits.slice(1)] : plausibleTotal(parseInt(digits, 10)) ? [digits] : [digits.slice(0, 2)];
+    for (const total of totals) {
+      if (plausibleTotal(parseInt(total, 10))) out.push({ number, total: parseInt(total, 10) });
+    }
+  }
   return out;
 }
 
