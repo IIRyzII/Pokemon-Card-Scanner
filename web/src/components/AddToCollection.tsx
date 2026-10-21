@@ -1,6 +1,7 @@
 // Two-step add: fill in the copy's details, then confirm before anything is saved.
 
 import { useState } from 'react';
+import { entryFor } from '../../../shared/copies.ts';
 import { gradeText } from '../../../shared/grading.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import type { CardDetailResponse, CardInfo, ItemFields } from '../../../shared/types.ts';
@@ -34,14 +35,16 @@ export function AddToCollection({ card, detail, onClose }: Props) {
   const estimate = detail ? valueItem(fields, detail.prices, detail.sales, ctx) : null;
   const number = cardNumberText(card.number, card.setTotal);
   const alreadyOwned = detail?.owned.reduce((n, i) => n + i.quantity, 0) ?? 0;
+  // The copy this one will be counted with, as the API picks it (the oldest the same).
+  const countedWith = detail ? entryFor([...detail.owned].sort((a, b) => a.createdAt.localeCompare(b.createdAt)), fields) : undefined;
 
   async function confirmAdd() {
     setBusy(true);
     setError(null);
     try {
-      const { item } = await api.addItem({ cardId: card.id, ...fields });
+      const { item, merged } = await api.addItem({ cardId: card.id, ...fields });
       await reload();
-      toast(`Added ${item.name} to the collection`);
+      toast(merged ? `Counted with your other ${item.name}: now ×${item.quantity}` : `Added ${item.name} to the collection`);
       onClose();
       navigate(`/item/${encodeURIComponent(item.id)}`);
     } catch (err) {
@@ -111,6 +114,12 @@ export function AddToCollection({ card, detail, onClose }: Props) {
       }
     >
       <p className="confirm-q">Add this card to the collection?</p>
+      {countedWith && (
+        <p className="note">
+          You already have {countedWith.quantity} like this, so it's counted with {countedWith.quantity === 1 ? 'it' : 'them'}: one
+          entry, ×{countedWith.quantity + fields.quantity}.
+        </p>
+      )}
       <div className="confirm-card">
         <CardImage base={card.image} name={card.name} quality="high" eager setId={card.setId} number={card.number} />
         <dl className="facts">

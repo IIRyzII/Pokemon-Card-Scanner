@@ -147,6 +147,26 @@ try {
     assert.equal(data.item.value, usdToGbp(usd), 'TCGplayer USD price converted to GBP');
   });
 
+  await check('another copy of the same card is counted with it; different details get their own entry', async () => {
+    const pika = { cardId: 'sv03.5-025', variant: 'reverse', grader: 'RAW', condition: 'NM', quantity: 1 };
+    const again = await api('POST', '/api/collection', { token: B, body: pika, expect: 200 });
+    assert.equal(again.data.merged, true);
+    assert.equal(again.data.item.id, pikachuId, 'the same entry');
+    assert.equal(again.data.item.quantity, 3);
+    const separate = [];
+    for (const differs of [{ condition: 'LP' }, { purchasePrice: 4.5 }]) {
+      const { data } = await api('POST', '/api/collection', { token: B, body: { ...pika, ...differs }, expect: 201 });
+      assert.equal(data.merged, false, JSON.stringify(differs));
+      separate.push(data.item.id);
+    }
+    const list = await api('GET', '/api/collection', { token: B, expect: 200 });
+    assert.equal(list.data.items.filter((i) => i.cardId === 'sv03.5-025').length, 3);
+    for (const id of separate) {
+      await api('DELETE', `/api/collection/${id}`, { token: B, expect: 200 });
+      await api('DELETE', `/api/collection/${id}/purge`, { token: A, expect: 200 });
+    }
+  });
+
   await check('validation: wrong printing, bad grade, unknown card', async () => {
     await api('POST', '/api/collection', { token: B, body: { cardId: 'base1-4', variant: 'reverse' }, expect: 400 });
     await api('POST', '/api/collection', {

@@ -5,6 +5,7 @@ A phone-friendly web app for tracking a Pokémon card collection:
 - **Scan** a card with your phone camera: hold it in view, at any angle, and **auto-scan** recognises it by its picture, usually in under a second (or tap the shutter, or use a photo). Or **search** by name / set / number (`charizard 4/102`).
 - **Scan a stack**: switch the scanner to **Stack of cards** and show your cards one after another. Each card found goes in a list and the camera carries on with the next one. Then check the list (printing, condition, quantity, estimated value) and add every card at once.
 - **Confirm before adding**: pick the printing (normal, holo, reverse, 1st edition), raw condition or graded slab (PSA, BGS, CGC, SGC, TAG, ACE), quantity and what you paid, then review and confirm.
+- **Duplicates share one entry**: another copy of a card you already have (same printing and condition or grade) is counted with it, so you see one entry ×2, not two entries. Copies with a different price paid, purchase date, notes or a cert number keep their own entry, so those details aren't lost.
 - Every card shows its **image, name, set, number** and **price**. Totals for the whole collection are at the top.
 - **Raw prices** (TCGplayer + Cardmarket) refresh when you open the app, and the app keeps its **own price history**.
 - **Your currency**: everything is shown in **GBP** by default. Anyone can switch to USD, EUR, CAD or AUD under **Account → Currency**.
@@ -150,7 +151,7 @@ The API enforces roles on every request, so hiding a button in the app is never 
 - **Scanning a stack** (choose **Stack of cards** above the camera):
   - Each card the scanner is sure of goes straight into the list, with a buzz, and the bar under the camera shows it. Tap **Undo** if it's wrong. If the scanner isn't sure, tap the shutter and pick the match: it goes in the list too.
   - Take each card out of view before showing the next. The same card shown again after it has left the view counts as another copy. Two copies of the same card in a row only count as two if the view is clear between them, so check the counts in the list.
-  - The **List** tab keeps the cards on your phone until you add them, even if you close the app. Every card starts as raw, Near Mint, in its first printing. Change the count with − / +, or tap **Edit** for the printing, a graded slab, the price you paid or notes. Then press **Add … to the collection** and confirm once.
+  - The **List** tab keeps the cards on your phone until you add them, even if you close the app. Every card starts as raw, Near Mint, in its first printing. Change the count with − / +, or tap **Edit** for the printing, a graded slab, the price you paid or notes. Then press **Add … to the collection** and confirm once. Cards you already have are counted with your existing copies.
   - If a card can't be added (no connection, say), it stays in the list with the reason, so you can try again.
 - If the scan isn't sure, tap **Search instead**. Your words are pre-filled, so you can fix a letter or two.
 

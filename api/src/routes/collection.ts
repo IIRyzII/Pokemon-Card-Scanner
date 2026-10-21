@@ -1,6 +1,7 @@
 // The shared collection: viewers read, editors change, admins purge the trash.
 
 import { Hono } from 'hono';
+import { entryFor } from '../../../shared/copies.ts';
 import { CURRENCIES, convert } from '../../../shared/currency.ts';
 import { CONDITIONS, GRADERS, GRADE_LABELS, VARIANTS, isGrade } from '../../../shared/grading.ts';
 import { hasRole, type CollectionResponse, type ItemFields, type PriceRefreshResponse } from '../../../shared/types.ts';
@@ -108,42 +109,60 @@ collection.post('/', requireRole('editor'), async (c) => {
     throw new HttpError(400, `${card.name} (${card.setName}) doesn't come in that printing`);
   }
   const user = c.get('user');
-  const id = crypto.randomUUID();
   const now = nowIso();
+  // Another copy of one already in the collection is counted with it, not given a second entry.
+  const { results: owned } = await c.env.DB.prepare(
+    `${ITEM_SELECT} WHERE ci.card_id = ? AND ci.deleted_at IS NULL ORDER BY ci.created_at ASC`,
+  )
+    .bind(card.id)
+    .all();
+  const same = entryFor(owned.map(toItem), fields);
+  const id = same?.id ?? crypto.randomUUID();
+  const write = same
+    ? c.env.DB.prepare('UPDATE collection_items SET quantity = quantity + ?, updated_at = ? WHERE id = ?').bind(
+        fields.quantity,
+        now,
+        id,
+      )
+    : c.env.DB.prepare(
+        `INSERT INTO collection_items (id, card_id, name, set_id, set_name, number, set_total, rarity, artist, image, dex_id,
+           variant, grader, grade, grade_label, condition, quantity, purchase_price, purchase_currency, purchase_date,
+           cert_number, notes, added_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        id,
+        card.id,
+        card.name,
+        card.setId,
+        card.setName,
+        card.number,
+        card.setTotal,
+        card.rarity,
+        card.artist,
+        card.image,
+        card.dexId,
+        fields.variant,
+        fields.grader,
+        fields.grade,
+        fields.gradeLabel,
+        fields.condition,
+        fields.quantity,
+        fields.purchasePrice,
+        fields.purchaseCurrency,
+        fields.purchaseDate,
+        fields.certNumber,
+        fields.notes,
+        user.id,
+        now,
+        now,
+      );
   await c.env.DB.batch([
-    c.env.DB.prepare(
-      `INSERT INTO collection_items (id, card_id, name, set_id, set_name, number, set_total, rarity, artist, image, dex_id,
-         variant, grader, grade, grade_label, condition, quantity, purchase_price, purchase_currency, purchase_date,
-         cert_number, notes, added_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(
-      id,
-      card.id,
-      card.name,
-      card.setId,
-      card.setName,
-      card.number,
-      card.setTotal,
-      card.rarity,
-      card.artist,
-      card.image,
-      card.dexId,
-      fields.variant,
-      fields.grader,
-      fields.grade,
-      fields.gradeLabel,
-      fields.condition,
-      fields.quantity,
-      fields.purchasePrice,
-      fields.purchaseCurrency,
-      fields.purchaseDate,
-      fields.certNumber,
-      fields.notes,
-      user.id,
-      now,
-      now,
-    ),
-    auditStmt(c.env, user, 'add', 'item', id, { card: `${card.name} · ${card.setName} #${card.number}`, ...fields }),
+    write,
+    auditStmt(c.env, user, 'add', 'item', id, {
+      card: `${card.name} · ${card.setName} #${card.number}`,
+      ...fields,
+      ...(same ? { countedWith: `the ${same.quantity} already in the collection` } : {}),
+    }),
   ]);
   if (await pricesAreStale(c.env, cardId)) {
     await refreshMarketPrices(c.env, cardId).catch((err) => console.warn('price refresh failed', err));
@@ -154,7 +173,7 @@ collection.post('/', requireRole('editor'), async (c) => {
       refreshPriceCharting(c.env, card, [fields.variant]).then(() => recomputeValues(c.env, cardId)),
     );
   }
-  return c.json({ item: await getItem(c.env, id) }, 201);
+  return c.json({ item: await getItem(c.env, id), merged: !!same }, same ? 200 : 201);
 });
 
 collection.patch('/:id', requireRole('editor'), async (c) => {

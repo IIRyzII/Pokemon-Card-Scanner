@@ -15,6 +15,9 @@ let progressListener: ((progress: number, status: string) => void) | null = null
 export function warmUpOcr(): Promise<Worker> {
   workerPromise ??= createWorker('eng', OEM.LSTM_ONLY, {
     logger: (m) => progressListener?.(m.progress, m.status),
+    // Failures reach us through the rejected promises; without this Tesseract also throws each one
+    // again as an uncaught error (e.g. when its download fails offline).
+    errorHandler: () => undefined,
   }).catch((err) => {
     workerPromise = null;
     throw err;

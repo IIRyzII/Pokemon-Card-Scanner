@@ -105,7 +105,8 @@ export const api = {
 
   collection: (trash = false) => request<CollectionResponse>('GET', `/api/collection${trash ? '?deleted=1' : ''}`),
   item: (id: string) => request<{ item: CollectionItem }>('GET', `/api/collection/${enc(id)}`),
-  addItem: (input: NewItemInput) => request<{ item: CollectionItem }>('POST', '/api/collection', input),
+  /** `merged`: counted with a copy already in the collection (that entry's quantity went up). */
+  addItem: (input: NewItemInput) => request<{ item: CollectionItem; merged: boolean }>('POST', '/api/collection', input),
   updateItem: (id: string, patch: Partial<ItemFields>) =>
     request<{ item: CollectionItem }>('PATCH', `/api/collection/${enc(id)}`, patch),
   removeItem: (id: string) => request<{ ok: true }>('DELETE', `/api/collection/${enc(id)}`),
