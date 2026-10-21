@@ -38,6 +38,7 @@ const MOVED = 0.08; // …and more than this = the card was moved (or swapped)
 const STEADY_LOOKS = 2; // without an outline: steady looks in a row before reading the guide frame
 const SETTLE_MS = 1500; // focus and exposure shift while the camera starts; that isn't the card moving
 const MOVING_SNAPSHOT = 12; // without an outline: frame change above this = moving
+const GONE_LOOKS = 4; // scanning a stack: looks in a row without the card found before it counts as put away
 
 let lastFound: string | null = null;
 
@@ -66,15 +67,22 @@ interface Options {
   frame: RefObject<HTMLElement | null>;
   /** Called with a reading that's certain. Its image is released after this returns. */
   onFound: (reading: Reading) => void;
+  /**
+   * Scanning a stack of cards: after a find, carry on with the next card (once the one found is
+   * moved away) instead of stopping.
+   */
+  keepGoing?: boolean;
 }
 
-export function useAutoScan({ active, catalog, video, frame, onFound }: Options): { status: AutoStatus | null; outline: Outline | null } {
+export function useAutoScan({ active, catalog, video, frame, onFound, keepGoing = false }: Options): { status: AutoStatus | null; outline: Outline | null } {
   const [status, setStatus] = useState<AutoStatus | null>(null);
   const [outline, setOutline] = useState<Outline | null>(null);
-  // Keep the latest onFound without restarting the loop.
+  // Keep the latest onFound and keepGoing without restarting the loop.
   const found = useRef(onFound);
+  const keep = useRef(keepGoing);
   useLayoutEffect(() => {
     found.current = onFound;
+    keep.current = keepGoing;
   });
 
   useEffect(() => {
@@ -110,6 +118,10 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
       let checks = 0; // reads in a row that knew the card by its picture but not which printing
       let streakId: string | null = null; // the card the last look's picture clearly matched…
       let streak = 0; // …and how many looks in a row it has
+      // Scanning a stack: the card just found is still in view (also when the camera restarts after
+      // one was put in the list by hand)…
+      let leaving = keep.current && lastFound !== null;
+      let gone = 0; // …and how many looks in a row it hasn't been
 
       while (!signal.aborted) {
         await wait(TICK_MS);
@@ -122,6 +134,7 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
         let reading: Reading | null = null;
         if (detection) {
           snap = null;
+          gone = 0;
           const shift = corners ? cornerShift(corners, detection.corners) : 1;
           corners = detection.corners;
           const still = shift < STILL_ENOUGH;
@@ -130,7 +143,9 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
             paused = false;
             misses = 0;
             checks = 0;
-            if (performance.now() - started > SETTLE_MS) moved = true;
+            // (A card found from a stack only counts as moved once it has left the view: a card
+            // jiggling in the hand isn't another copy.)
+            if (!leaving && performance.now() - started > SETTLE_MS) moved = true;
           }
           if (paused) continue;
           // The text needs a sharp frame; the picture doesn't (it only uses the card's broad shapes).
@@ -168,6 +183,10 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
           streak = 0;
           streakId = null;
           setOutline(null);
+          if (leaving && ++gone >= GONE_LOOKS) {
+            leaving = false;
+            moved = true; // put away: the same card again is another copy
+          }
           const now = snapshot(v, frameCrop(v, f));
           const change = snap ? frameChange(snap, now) : 0;
           snap = now;
@@ -175,7 +194,7 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
             steady = 0;
             restUntil = 0;
             paused = false;
-            if (performance.now() - started > SETTLE_MS) moved = true;
+            if (!leaving && performance.now() - started > SETTLE_MS) moved = true;
             show({ state: 'moving' });
             continue;
           }
@@ -205,7 +224,15 @@ export function useAutoScan({ active, catalog, video, frame, onFound }: Options)
           }
           found.current(reading);
           releaseCanvas(reading.image);
-          return;
+          if (!keep.current) return;
+          // On to the next card: this one isn't picked again until it has left the view.
+          lastFound = top.card.id;
+          moved = false;
+          paused = true;
+          leaving = true;
+          gone = 0;
+          show({ state: 'repeat', name: top.card.name });
+          continue;
         }
         releaseCanvas(reading.image);
         if (reading.picture?.clear) {

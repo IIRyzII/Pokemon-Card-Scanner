@@ -138,8 +138,8 @@ export function AccountPage() {
             {catalog && ` (current copy: ${shortDate(catalog.builtAt)}, ${catalog.cards.length.toLocaleString()} cards)`}.
           </li>
           <li>
-            Raw market prices: TCGplayer (USD) and Cardmarket (EUR), refreshed daily by the PokéVault API, which keeps its own
-            price history, and converted to your currency.
+            Raw market prices: TCGplayer (USD) and Cardmarket (EUR), refreshed by the PokéVault API when you open the app
+            (and daily in the background), which keeps its own price history, and converted to your currency.
           </li>
           <li>
             Graded prices: eBay sold prices logged in the app, plus PriceCharting

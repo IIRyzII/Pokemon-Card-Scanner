@@ -24,6 +24,18 @@ export function tcgplayerVariant(key: string): string {
 
 const price = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null);
 
+/**
+ * The sources a response has prices from. TCGdex leaves a source out of some responses (in
+ * October 2026, TCGplayer from about every other request for the same card), so a missing source
+ * means "no news", not "no longer priced".
+ */
+export function reportedSources(raw: TcgdexPricing): ('tcgplayer' | 'cardmarket')[] {
+  return (['tcgplayer', 'cardmarket'] as const).filter((source) => {
+    const block = raw.pricing?.[source];
+    return !!block && typeof block === 'object';
+  });
+}
+
 export function extractPrices(raw: TcgdexPricing, now: string): PriceRow[] {
   const rows: PriceRow[] = [];
   const tcg = raw.pricing?.tcgplayer;

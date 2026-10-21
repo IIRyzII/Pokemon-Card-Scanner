@@ -89,4 +89,4 @@ export function normalizeCard(raw: TcgdexCard, set: TcgdexSetInfo | null): CardI
 }
 
 // Price extraction is shared with the catalog builder (set values).
-export { extractPrices, tcgplayerVariant } from '../../shared/market.ts';
+export { extractPrices, reportedSources, tcgplayerVariant } from '../../shared/market.ts';

@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react';
 import type { CollectionItem } from '../../../shared/types.ts';
 import { hasRole } from '../../../shared/types.ts';
 import { ItemTile } from '../components/CardTile.tsx';
-import { IconPlus, IconSearch } from '../components/Icons.tsx';
+import { IconPlus, IconRefresh, IconSearch } from '../components/Icons.tsx';
 import { canonicalArtist, normName, type Catalog } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
+import { relativeTime } from '../lib/format.ts';
 import { href } from '../lib/router.ts';
 import { useSession } from '../lib/session.tsx';
 import { useCatalog } from '../lib/useCatalog.ts';
@@ -65,7 +66,7 @@ function sortItems(
 }
 
 export function CollectionPage() {
-  const { data, error, loading, reload } = useCollection();
+  const { data, error, loading, reload, pricesUpdating } = useCollection();
   const { user } = useSession();
   const { catalog } = useCatalog();
   const { format, convert, currency } = useCurrency();
@@ -119,6 +120,13 @@ export function CollectionPage() {
         <div>
           <div className="muted small">Collection value</div>
           <div className="big-value">{s ? format(s.totalValue, s.currency) : '—'}</div>
+          {pricesUpdating ? (
+            <div className="prices-status faint small">
+              <IconRefresh className="spin" /> Updating prices…
+            </div>
+          ) : (
+            s?.pricesUpdatedAt && <div className="prices-status faint small">Prices updated {relativeTime(s.pricesUpdatedAt)}</div>
+          )}
         </div>
         <div className="stats">
           <div>

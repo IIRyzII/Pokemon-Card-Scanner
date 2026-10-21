@@ -120,7 +120,17 @@ export interface CollectionResponse {
     totalValue: number;
     currency: string;
     unpriced: number;
+    /** When the least recently refreshed card's prices were fetched (null: none yet). */
+    pricesUpdatedAt: string | null;
   };
+}
+
+/** Prices fetched again by POST /api/collection/refresh-prices, one batch per call. */
+export interface PriceRefreshResponse {
+  refreshed: number;
+  failed: number;
+  /** Cards whose prices are still out of date: call again for the next batch. */
+  remaining: number;
 }
 
 export interface HistoryPoint {

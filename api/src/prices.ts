@@ -1,16 +1,27 @@
 // Card cache, price refreshes, price history and item valuations.
 
-import type { CardInfo, PriceRow } from '../../shared/types.ts';
+import type { CardInfo, PriceRefreshResponse, PriceRow } from '../../shared/types.ts';
 import { valueItem } from '../../shared/values.ts';
 import { toItem, toPrice, toSale } from './db.ts';
 import { HttpError, nowIso, todayIso, type Env } from './env.ts';
 import { getRates, homeCurrency } from './fx.ts';
 import { findProduct, pcProduct, productPrices } from './pricecharting.ts';
-import { extractPrices, fetchTcgdexCard, fetchTcgdexSet, normalizeCard, type TcgdexSetInfo } from './tcgdex.ts';
+import {
+  extractPrices,
+  fetchTcgdexCard,
+  fetchTcgdexSet,
+  normalizeCard,
+  reportedSources,
+  type TcgdexSetInfo,
+} from './tcgdex.ts';
 
 const CARD_TTL_MS = 7 * 86_400_000;
 const SET_TTL_MS = 30 * 86_400_000;
 export const PRICE_TTL_MS = 20 * 3_600_000;
+/** When the app opens, prices older than this are fetched again (TCGdex updates them about daily). */
+export const ON_OPEN_TTL_MS = 6 * 3_600_000;
+/** A card whose last refresh failed (TCGdex has short outages) is tried again after this. */
+const RETRY_FAILED_MS = 30 * 60_000;
 
 async function cached<T>(env: Env, key: string, maxAgeMs: number): Promise<{ data: T; fresh: boolean } | null> {
   const row = await env.DB.prepare('SELECT data, fetched_at FROM card_cache WHERE card_id = ?')
@@ -44,7 +55,7 @@ export async function getCard(env: Env, cardId: string): Promise<CardInfo> {
   const hit = await cached<CardInfo>(env, cardId, CARD_TTL_MS);
   if (hit?.fresh) return hit.data;
   try {
-    const result = await refreshMarketPrices(env, cardId);
+    const result = await refreshMarketPrices(env, cardId, !hit);
     return result.card;
   } catch (err) {
     if (hit) return hit.data; // stale beats nothing
@@ -77,18 +88,28 @@ function priceStmts(env: Env, cardId: string, rows: PriceRow[]): D1PreparedState
   return stmts;
 }
 
-/** Re-fetches card details + TCGplayer/Cardmarket prices (one TCGdex request). */
-export async function refreshMarketPrices(env: Env, cardId: string): Promise<{ card: CardInfo; rows: PriceRow[] }> {
-  const raw = await fetchTcgdexCard(env, cardId);
+/**
+ * Re-fetches card details + TCGplayer/Cardmarket prices: one TCGdex request, or up to three for a
+ * card's `first` prices when TCGplayer's are missing (TCGdex leaves them out of some responses), so
+ * it isn't valued from Cardmarket until its next refresh.
+ */
+export async function refreshMarketPrices(env: Env, cardId: string, first = false): Promise<{ card: CardInfo; rows: PriceRow[] }> {
+  let raw = await fetchTcgdexCard(env, cardId);
   if (!raw) throw new HttpError(404, `Card ${cardId} was not found`);
+  for (let again = 0; first && again < 2 && !reportedSources(raw).includes('tcgplayer'); again++) {
+    raw = (await fetchTcgdexCard(env, cardId).catch(() => null)) ?? raw; // a failed retry keeps the answer we have
+  }
   const set = await getSetInfo(env, raw.set.id);
   const card = normalizeCard(raw, set);
   const now = nowIso();
   const rows = extractPrices(raw, now);
   await env.DB.batch([
     cacheStmt(env, cardId, card),
-    // Drop market rows the source no longer reports, then write the current ones.
-    env.DB.prepare(`DELETE FROM card_prices WHERE card_id = ? AND source IN ('tcgplayer', 'cardmarket')`).bind(cardId),
+    // Replace each source's rows with what it reports now (dropping printings it no longer lists).
+    // A source missing from the response keeps the prices we had.
+    ...reportedSources(raw).map((source) =>
+      env.DB.prepare('DELETE FROM card_prices WHERE card_id = ? AND source = ?').bind(cardId, source),
+    ),
     ...priceStmts(env, cardId, rows),
     env.DB.prepare(
       `INSERT INTO price_refresh (card_id, refreshed_at, status, message) VALUES (?, ?, 'ok', NULL)
@@ -202,27 +223,42 @@ export async function recomputeValues(env: Env, cardId: string): Promise<void> {
   );
 }
 
-/** Cron: refresh the stalest cards in the collection, staying under the free plan's 50 outbound requests
- *  (one per card, plus the occasional set lookup and the exchange-rate fetch). */
-export async function scheduledRefresh(env: Env): Promise<void> {
-  await getRates(env); // keep exchange rates current even on quiet days
-  const limit = env.PRICECHARTING_TOKEN ? 12 : 35;
-  const cutoff = new Date(Date.now() - PRICE_TTL_MS).toISOString();
+/**
+ * Refreshes the collection's cards whose prices are older than `maxAgeMs`, stalest first, as many
+ * as one run can: the free plan allows 50 outbound requests per run (one per card, plus the
+ * occasional set lookup and the exchange-rate fetch).
+ */
+export async function refreshStalePrices(env: Env, maxAgeMs: number): Promise<PriceRefreshResponse> {
+  await getRates(env); // once up front (and kept current even on quiet days), not by every card at once
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+  const failedCutoff = new Date(Date.now() - Math.min(maxAgeMs, RETRY_FAILED_MS)).toISOString();
   const { results } = await env.DB.prepare(
     `SELECT ci.card_id, MIN(pr.refreshed_at) AS refreshed_at
        FROM collection_items ci LEFT JOIN price_refresh pr ON pr.card_id = ci.card_id
-      WHERE ci.deleted_at IS NULL AND (pr.refreshed_at IS NULL OR pr.refreshed_at < ?)
+      WHERE ci.deleted_at IS NULL
+        AND (pr.refreshed_at IS NULL OR pr.refreshed_at < ? OR (pr.status = 'error' AND pr.refreshed_at < ?))
       GROUP BY ci.card_id
-      ORDER BY refreshed_at ASC
-      LIMIT ?`,
+      ORDER BY refreshed_at ASC`,
   )
-    .bind(cutoff, limit)
+    .bind(cutoff, failedCutoff)
     .all<{ card_id: string }>();
-  for (const { card_id } of results) {
-    try {
-      await refreshCard(env, card_id);
-    } catch (err) {
-      console.warn(`Price refresh failed for ${card_id}:`, err);
-    }
+  const batch = results.slice(0, env.PRICECHARTING_TOKEN ? 12 : 35);
+  let failed = 0;
+  // A few at a time: much quicker than one by one, and still gentle on TCGdex.
+  for (let i = 0; i < batch.length; i += 4) {
+    await Promise.all(
+      batch.slice(i, i + 4).map(({ card_id }) =>
+        refreshCard(env, card_id).catch((err) => {
+          failed++;
+          console.warn(`Price refresh failed for ${card_id}:`, err);
+        }),
+      ),
+    );
   }
+  return { refreshed: batch.length - failed, failed, remaining: results.length - batch.length };
+}
+
+/** Cron: keep every card's prices under a day old even when nobody opens the app. */
+export async function scheduledRefresh(env: Env): Promise<void> {
+  await refreshStalePrices(env, PRICE_TTL_MS);
 }

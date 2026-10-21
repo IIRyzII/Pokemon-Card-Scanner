@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { extractPrices, standardPrice } from './market.ts';
+import { extractPrices, reportedSources, standardPrice } from './market.ts';
 
 const now = '2026-10-17T00:00:00Z';
 // TCGdex's pricing for Paradox Rift #001 (normal + reverse holo)
@@ -38,4 +38,11 @@ test('standard price: Cardmarket when TCGplayer has nothing', () => {
   assert.deepEqual(standardPrice({ normal: true }, rows), { amount: 2.5, currency: 'EUR' });
   assert.deepEqual(standardPrice({ reverse: true }, rows), { amount: 4, currency: 'EUR' }, 'reverse-only cards: Cardmarket holo');
   assert.equal(standardPrice({ normal: true }, extractPrices({ pricing: null }, now)), null);
+});
+
+test('a source left out of the response is not reported (its old prices stay)', () => {
+  assert.deepEqual(reportedSources(sv04001), ['tcgplayer', 'cardmarket']);
+  assert.deepEqual(reportedSources({ pricing: { cardmarket: sv04001.pricing.cardmarket } }), ['cardmarket']);
+  assert.deepEqual(reportedSources({ pricing: { tcgplayer: null, cardmarket: sv04001.pricing.cardmarket } }), ['cardmarket']);
+  assert.deepEqual(reportedSources({}), []);
 });

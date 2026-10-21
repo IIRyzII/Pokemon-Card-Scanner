@@ -3,9 +3,10 @@
 A phone-friendly web app for tracking a Pokémon card collection:
 
 - **Scan** a card with your phone camera: hold it in view, at any angle, and **auto-scan** recognises it by its picture, usually in under a second (or tap the shutter, or use a photo). Or **search** by name / set / number (`charizard 4/102`).
+- **Scan a stack**: switch the scanner to **Stack of cards** and show your cards one after another. Each card found goes in a list and the camera carries on with the next one. Then check the list (printing, condition, quantity, estimated value) and add every card at once.
 - **Confirm before adding**: pick the printing (normal, holo, reverse, 1st edition), raw condition or graded slab (PSA, BGS, CGC, SGC, TAG, ACE), quantity and what you paid, then review and confirm.
 - Every card shows its **image, name, set, number** and **price**. Totals for the whole collection are at the top.
-- **Raw prices** (TCGplayer + Cardmarket) refresh daily, and the app keeps its **own price history**.
+- **Raw prices** (TCGplayer + Cardmarket) refresh when you open the app, and the app keeps its **own price history**.
 - **Your currency**: everything is shown in **GBP** by default. Anyone can switch to USD, EUR, CAD or AUD under **Account → Currency**.
   - Prices are converted with the European Central Bank's daily rates.
   - Logged sales and purchase prices remember the currency they were entered in.
@@ -41,7 +42,7 @@ A phone-friendly web app for tracking a Pokémon card collection:
 
 | Price | Source | Notes |
 |---|---|---|
-| Raw market price | TCGplayer (USD) + Cardmarket (EUR), via TCGdex | Automatic, refreshed daily for cards in your collection |
+| Raw market price | TCGplayer (USD) + Cardmarket (EUR), via TCGdex | Automatic for cards in your collection: refreshed when you open the app if they're more than 6 hours old, and at least daily in the background. If TCGdex leaves a source out of a response (it sometimes does), the last prices from that source are kept. |
 | Set values | The same market prices for every card in the catalog | One near-mint copy of each card's standard printing. Refreshed weekly when the site rebuilds. |
 | eBay "last sold" | **You log them** in the app | eBay closed its public sold-listings API in 2025 and doesn't allow scraping. Each grade has a one-tap link to eBay's sold results. |
 | Graded price points | PriceCharting (optional) | Needs a paid PriceCharting subscription. Their prices are built from eBay sales. |
@@ -146,6 +147,11 @@ The API enforces roles on every request, so hiding a button in the app is never 
 - If the card's outline can't be found (a white card on a white table, say), it reads the card inside the on-screen frame instead, from its **name and HP** at the top and the **number / set size / set code** at the bottom (`025/165`, `MEW`, `TG05/TG30`, `SWSH050`).
 - Photos work the same way: the card can be anywhere in the photo.
 - Nothing is added until you tap a match, review the details and press **Confirm & add**.
+- **Scanning a stack** (choose **Stack of cards** above the camera):
+  - Each card the scanner is sure of goes straight into the list, with a buzz, and the bar under the camera shows it. Tap **Undo** if it's wrong. If the scanner isn't sure, tap the shutter and pick the match: it goes in the list too.
+  - Take each card out of view before showing the next. The same card shown again after it has left the view counts as another copy. Two copies of the same card in a row only count as two if the view is clear between them, so check the counts in the list.
+  - The **List** tab keeps the cards on your phone until you add them, even if you close the app. Every card starts as raw, Near Mint, in its first printing. Change the count with − / +, or tap **Edit** for the printing, a graded slab, the price you paid or notes. Then press **Add … to the collection** and confirm once.
+  - If a card can't be added (no connection, say), it stays in the list with the reason, so you can try again.
 - If the scan isn't sure, tap **Search instead**. Your words are pre-filled, so you can fix a letter or two.
 
 ## Local development
@@ -167,7 +173,7 @@ npm run catalog             # rebuild the card catalog and picture fingerprints 
 
 The first `npm run catalog` downloads every card's small picture (about 20,000 images) to fingerprint them, which takes around 10 minutes. After that, fingerprints are reused and only new cards are downloaded. The weekly GitHub build reuses the ones already on your site. Without `prints.bin`, the scanner still works by reading the card's text.
 
-Market prices for set values take one small request per card (about 2 minutes). They're reused while they're less than 6 days old, so only the weekly build refreshes them (`--prices-max-age-days` changes that).
+Market prices for set values take one small request per card, sometimes three, because TCGdex leaves TCGplayer's prices out of some responses and the build asks again (a few minutes in all). They're reused while they're less than 6 days old, so only the weekly build refreshes them (`--prices-max-age-days` changes that).
 
 To test on your phone before deploying, use the GitHub Pages URL. The camera and secure sign-in only work over `https://` or on `localhost`.
 

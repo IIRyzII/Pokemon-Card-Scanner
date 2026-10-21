@@ -21,7 +21,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import jpeg from 'jpeg-js';
 import { cardPrint, PRINT_SPEC, PRINT_WORDS } from '../shared/cardprint.ts';
-import { extractPrices, standardPrice } from '../shared/market.ts';
+import { extractPrices, reportedSources, standardPrice } from '../shared/market.ts';
 
 const API = 'https://api.tcgdex.net/v2/en';
 const GQL = 'https://api.tcgdex.net/v2/graphql';
@@ -342,17 +342,30 @@ async function buildPrices(catalog) {
   let failedInARow = 0;
   let failed = 0;
   let done = 0;
+  const fetchCard = async (id) => {
+    const res = await fetch(`${API}/cards/${encodeURIComponent(id)}`, {
+      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  };
   await pool(todo, 8, async (i) => {
     if (failedInARow > 30) return; // TCGdex is struggling: keep the earlier prices
     const id = catalog.cards[i][0];
     try {
-      const res = await fetch(`${API}/cards/${encodeURIComponent(id)}`, {
-        headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (res.status === 404) return;
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const raw = await res.json();
+      let raw = await fetchCard(id);
+      if (!raw) return;
+      // TCGdex leaves TCGplayer's prices out of some responses: ask again before taking Cardmarket's,
+      // and keep the TCGplayer price from last time rather than switching sources.
+      for (let again = 0; again < 2 && !reportedSources(raw).includes('tcgplayer'); again++) {
+        raw = (await fetchCard(id).catch(() => null)) ?? raw; // a failed retry keeps the answer we have
+      }
+      if (!reportedSources(raw).includes('tcgplayer') && usd[i] !== null) {
+        failedInARow = 0;
+        return;
+      }
       const p = standardPrice(raw.variants, extractPrices(raw, now));
       usd[i] = p?.currency === 'USD' ? p.amount : null;
       eur[i] = p?.currency === 'EUR' ? p.amount : null;

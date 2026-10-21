@@ -61,7 +61,7 @@ cards.get('/:cardId', async (c) => {
       c.executionCtx.waitUntil(refreshCard(env, cardId).catch((err) => console.warn('refresh failed', err)));
     } else {
       // First look at this card: fetch market prices now so the page isn't empty.
-      await refreshMarketPrices(env, cardId);
+      await refreshMarketPrices(env, cardId, true);
       await recomputeValues(env, cardId);
     }
   }

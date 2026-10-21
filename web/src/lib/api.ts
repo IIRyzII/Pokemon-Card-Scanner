@@ -10,6 +10,7 @@ import type {
   ItemFields,
   NewItemInput,
   NewSaleInput,
+  PriceRefreshResponse,
   SaleRow,
   User,
 } from '../../../shared/types.ts';
@@ -110,6 +111,7 @@ export const api = {
   removeItem: (id: string) => request<{ ok: true }>('DELETE', `/api/collection/${enc(id)}`),
   restoreItem: (id: string) => request<{ item: CollectionItem }>('POST', `/api/collection/${enc(id)}/restore`),
   purgeItem: (id: string) => request<{ ok: true }>('DELETE', `/api/collection/${enc(id)}/purge`),
+  refreshPrices: () => request<PriceRefreshResponse>('POST', '/api/collection/refresh-prices'),
 
   card: (cardId: string) => request<CardDetailResponse>('GET', `/api/cards/${enc(cardId)}`),
   refreshCard: (cardId: string, variant?: string) =>

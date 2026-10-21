@@ -1,16 +1,19 @@
 import { Suspense, lazy, useDeferredValue, useMemo, useState } from 'react';
 import { CatalogTile } from '../components/CardTile.tsx';
 import { ErrorBoundary } from '../components/ErrorBoundary.tsx';
-import { IconScan, IconSearch } from '../components/Icons.tsx';
+import { IconList, IconScan, IconSearch } from '../components/Icons.tsx';
 import { searchCards } from '../lib/catalog.ts';
 import { ownedCount, useCollection } from '../lib/collection.tsx';
 import { href } from '../lib/router.ts';
+import { copiesIn, useScanList } from '../lib/scanList.ts';
 import { useCatalog } from '../lib/useCatalog.ts';
+import { ScanListPanel } from './ScanListPanel.tsx';
 
 // The scanner (and its OCR engine) only downloads when the Scan tab is opened.
 const ScanPanel = lazy(() => import('./ScanPanel.tsx').then((m) => ({ default: m.ScanPanel })));
 
-export function AddPage({ tab, initialQuery }: { tab: 'search' | 'scan'; initialQuery?: string }) {
+export function AddPage({ tab, initialQuery }: { tab: 'search' | 'scan' | 'list'; initialQuery?: string }) {
+  const inList = copiesIn(useScanList());
   return (
     <div className="page">
       <div className="segmented full tabs">
@@ -20,6 +23,12 @@ export function AddPage({ tab, initialQuery }: { tab: 'search' | 'scan'; initial
         <a className={tab === 'scan' ? 'on' : ''} href={href('add', 'scan')}>
           <IconScan width={18} height={18} /> Scan
         </a>
+        {(inList > 0 || tab === 'list') && (
+          <a className={tab === 'list' ? 'on' : ''} href={href('add', 'list')}>
+            <IconList width={18} height={18} /> List
+            {inList > 0 && <span className="tab-count">{inList}</span>}
+          </a>
+        )}
       </div>
       {tab === 'scan' ? (
         <ErrorBoundary fallback={(error) => <ScannerFailed error={error} />}>
@@ -27,6 +36,8 @@ export function AddPage({ tab, initialQuery }: { tab: 'search' | 'scan'; initial
             <ScanPanel />
           </Suspense>
         </ErrorBoundary>
+      ) : tab === 'list' ? (
+        <ScanListPanel />
       ) : (
         <SearchPanel initialQuery={initialQuery ?? ''} />
       )}

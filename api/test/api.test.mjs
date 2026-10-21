@@ -170,6 +170,14 @@ try {
     assert.ok(data.refreshedAt);
   });
 
+  await check('opening the app refreshes prices only once they are a few hours old', async () => {
+    const { data } = await api('POST', '/api/collection/refresh-prices', { token: B, expect: 200 });
+    assert.deepEqual(data, { refreshed: 0, failed: 0, remaining: 0 }, 'both cards were priced moments ago, when added');
+    const list = await api('GET', '/api/collection', { token: B, expect: 200 });
+    const age = Date.now() - Date.parse(list.data.summary.pricesUpdatedAt);
+    assert.ok(age >= 0 && age < 10 * 60_000, JSON.stringify(list.data.summary));
+  });
+
   await check('logging an eBay PSA 9 sale values the slab from sales', async () => {
     const { data } = await api('POST', '/api/sales', {
       token: B,

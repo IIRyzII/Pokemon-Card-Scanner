@@ -29,6 +29,13 @@ export const IconSets = (p: P) => (
     <rect x="13.5" y="13" width="7.5" height="8" rx="1.5" />
   </svg>
 );
+/** A checklist (the scan list) */
+export const IconList = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M10 6h10M10 12h10M10 18h10" />
+    <path d="M3.5 6l1.2 1.2L7 5M3.5 12l1.2 1.2L7 11M3.5 18l1.2 1.2L7 17" />
+  </svg>
+);
 export const IconPlus = (p: P) => (
   <svg {...base(p)}>
     <path d="M12 5v14M5 12h14" />

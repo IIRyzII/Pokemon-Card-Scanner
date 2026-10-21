@@ -3,12 +3,20 @@
 import { Hono } from 'hono';
 import { CURRENCIES, convert } from '../../../shared/currency.ts';
 import { CONDITIONS, GRADERS, GRADE_LABELS, VARIANTS, isGrade } from '../../../shared/grading.ts';
-import { hasRole, type CollectionResponse, type ItemFields } from '../../../shared/types.ts';
+import { hasRole, type CollectionResponse, type ItemFields, type PriceRefreshResponse } from '../../../shared/types.ts';
 import { authenticate, requireRole } from '../auth.ts';
 import { ITEM_SELECT, auditStmt, getItem, toItem } from '../db.ts';
 import { HttpError, nowIso, type AppEnv, type Env } from '../env.ts';
 import { getRates, homeCurrency } from '../fx.ts';
-import { getCard, pricesAreStale, recomputeValues, refreshMarketPrices, refreshPriceCharting } from '../prices.ts';
+import {
+  ON_OPEN_TTL_MS,
+  getCard,
+  pricesAreStale,
+  recomputeValues,
+  refreshMarketPrices,
+  refreshPriceCharting,
+  refreshStalePrices,
+} from '../prices.ts';
 import { cardId as parseCardId, isoDate, number, oneOf, readJson, text } from '../validate.ts';
 
 const collection = new Hono<AppEnv>();
@@ -57,7 +65,22 @@ collection.get('/', async (c) => {
   const items = results.map(toItem);
   const currency = homeCurrency(c.env);
   const fx = await getRates(c.env);
-  const summary = { items: items.length, cards: 0, graded: 0, totalValue: 0, currency, unpriced: 0 };
+  const oldest = trash
+    ? null
+    : await c.env.DB.prepare(
+        // (Only refreshes that worked: a failed one didn't update anything.)
+        `SELECT MIN(pr.refreshed_at) AS at FROM collection_items ci JOIN price_refresh pr ON pr.card_id = ci.card_id
+          WHERE ci.deleted_at IS NULL AND pr.status = 'ok'`,
+      ).first<{ at: string | null }>();
+  const summary = {
+    items: items.length,
+    cards: 0,
+    graded: 0,
+    totalValue: 0,
+    currency,
+    unpriced: 0,
+    pricesUpdatedAt: oldest?.at ?? null,
+  };
   for (const it of items) {
     summary.cards += it.quantity;
     if (it.grader !== 'RAW') summary.graded += it.quantity;
@@ -68,6 +91,11 @@ collection.get('/', async (c) => {
   summary.totalValue = Math.round(summary.totalValue * 100) / 100;
   return c.json<CollectionResponse>({ items, summary });
 });
+
+/** The app calls this when it opens: fetches prices more than a few hours old, a batch per call. */
+collection.post('/refresh-prices', async (c) =>
+  c.json<PriceRefreshResponse>(await refreshStalePrices(c.env, ON_OPEN_TTL_MS)),
+);
 
 collection.get('/:id', async (c) => c.json({ item: await loadItem(c.env, c.req.param('id')) }));
 

@@ -52,7 +52,13 @@ function Shell() {
       page = <CardPage key={id} cardId={id} />;
       break;
     case 'add':
-      page = <AddPage key={route.query.get('q') ?? ''} tab={id === 'scan' ? 'scan' : 'search'} initialQuery={route.query.get('q') ?? ''} />;
+      page = (
+        <AddPage
+          key={route.query.get('q') ?? ''}
+          tab={id === 'scan' || id === 'list' ? id : 'search'}
+          initialQuery={route.query.get('q') ?? ''}
+        />
+      );
       break;
     case 'sets':
       page = <SetsPage />;

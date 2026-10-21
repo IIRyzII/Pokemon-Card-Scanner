@@ -1,12 +1,17 @@
 // Camera scanner: show a card to the camera and auto-scan finds it (or tap the shutter), then pick the match.
+// Scanning a stack, each card found goes in the scan list instead and the camera carries on.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cardNumberText } from '../../../shared/links.ts';
 import { CardImage } from '../components/CardImage.tsx';
 import { IconCamera, IconImage } from '../components/Icons.tsx';
+import { defaultFields } from '../components/ItemForm.tsx';
+import type { CatalogCard } from '../lib/catalog.ts';
+import { useCurrency } from '../lib/currency.tsx';
 import type { Candidate, Confidence, ScanGuess } from '../lib/match.ts';
 import { ownedCount, useCollection } from '../lib/collection.tsx';
 import { href, navigate } from '../lib/router.ts';
+import { copiesIn, listCardOf, scanList, setStackMode, stackMode, useLastAdded, useScanList } from '../lib/scanList.ts';
 import { loadPrintIndex, useCatalog } from '../lib/useCatalog.ts';
 import { findCard, locateCard, straightenCard, type Straightened } from '../scan/locate.ts';
 import { captureFrame, centerCrop, loadPhoto, releaseCanvas, warmUpOcr, type ScanResult } from '../scan/ocr.ts';
@@ -60,8 +65,13 @@ const resultsOf = (reading: Reading, auto: boolean): Results => ({
   error: null,
 });
 
-function statusText(auto: boolean, status: AutoStatus | null): string {
-  if (!auto) return 'Show the card to the camera, keep it flat and avoid glare, then press the button.';
+function statusText(auto: boolean, status: AutoStatus | null, stack: boolean): string {
+  if (!auto) {
+    return stack
+      ? 'Show a card, keep it flat and avoid glare, then press the button to put it in the list.'
+      : 'Show the card to the camera, keep it flat and avoid glare, then press the button.';
+  }
+  if (stack && status?.state === 'repeat') return `${status.name} is in the list. Show the next card.`;
   switch (status?.state) {
     case 'loading':
       return 'Getting the card reader ready…';
@@ -76,13 +86,18 @@ function statusText(auto: boolean, status: AutoStatus | null): string {
     case 'failed':
       return "Auto-scan couldn't load the card reader. Check your connection, or press the button.";
     default:
-      return 'Looking for a card. Show it to the camera, keep it flat and avoid glare.';
+      return stack
+        ? 'Show the cards one at a time, flat and without glare.'
+        : 'Looking for a card. Show it to the camera, keep it flat and avoid glare.';
   }
 }
 
 export function ScanPanel() {
   const { catalog, error: catalogError } = useCatalog();
   const { ownedByCard } = useCollection();
+  const { currency } = useCurrency();
+  const list = useScanList();
+  const lastAdded = useLastAdded();
   const video = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -95,6 +110,7 @@ export function ScanPanel() {
   const [preview, setPreview] = useState<string | null>(null);
   const [torch, setTorch] = useState<boolean | null>(null);
   const [auto, setAuto] = useState(readAuto);
+  const [stack, setStack] = useState(stackMode);
 
   const stopCamera = useCallback(() => {
     stream.current?.getTracks().forEach((t) => t.stop());
@@ -149,8 +165,21 @@ export function ScanPanel() {
     };
   }, [startCamera, stopCamera, restored]);
 
+  /** Scanning a stack: puts the card in the list. (Nothing is saved until the list is added.) */
+  function addToList(card: CatalogCard) {
+    scanList.add(listCardOf(card), defaultFields([], currency));
+    markFound(card.id);
+    navigator.vibrate?.(40);
+  }
+
   function show(r: Results) {
     if (!mounted.current) return; // the read finished after leaving the scanner
+    if (stack && r.confidence === 'sure') {
+      // Certain: straight into the list, and on to the next card.
+      addToList(r.candidates[0].card);
+      void startCamera();
+      return;
+    }
     stopCamera();
     lastResults = r;
     markHistory(true);
@@ -165,9 +194,11 @@ export function ScanPanel() {
     video,
     frame,
     onFound: (reading) => {
+      if (stack) return addToList(reading.candidates[0].card); // the camera carries on
       navigator.vibrate?.(40);
       show(resultsOf(reading, true));
     },
+    keepGoing: stack,
   });
 
   /** Reads a card (straightened, or a plain crop when it couldn't be found) and shows what it is. */
@@ -233,12 +264,24 @@ export function ScanPanel() {
     }
   }
 
+  function chooseStack(on: boolean) {
+    setStack(on);
+    setStackMode(on);
+  }
+
   function scanAgain() {
     lastResults = null;
     markHistory(false);
     setResults(null);
     setPreview(null);
     void startCamera();
+  }
+
+  /** A match was tapped: its page (to see prices and add it), or when scanning a stack, into the list. */
+  function pick(card: CatalogCard) {
+    if (!stack) return openCard(card.id);
+    addToList(card);
+    scanAgain();
   }
 
   const guess = results?.guess;
@@ -260,9 +303,11 @@ export function ScanPanel() {
   const best = results?.confidence ? results.candidates[0] : null;
   const others = results ? (best ? results.candidates.slice(1) : results.candidates) : [];
   const owned = (c: Candidate) => ownedCount(ownedByCard.get(c.card.id));
+  const inList = copiesIn(list);
+  const lastEntry = lastAdded && list.find((e) => e.key === lastAdded.key);
 
   return (
-    <div className="scan">
+    <div className={`scan${stack ? ' stacking' : ''}`}>
       {catalogError && <p className="error">{catalogError}</p>}
       <input
         ref={fileInput}
@@ -278,6 +323,14 @@ export function ScanPanel() {
 
       {(phase === 'starting' || phase === 'live') && (
         <>
+          <div className="segmented small scan-mode" role="group" aria-label="What to scan">
+            <button type="button" className={!stack ? 'on' : ''} aria-pressed={!stack} onClick={() => chooseStack(false)}>
+              One card
+            </button>
+            <button type="button" className={stack ? 'on' : ''} aria-pressed={stack} onClick={() => chooseStack(true)}>
+              Stack of cards
+            </button>
+          </div>
           <div className={`viewfinder${outline ? ' has-card' : ''}`}>
             <video ref={video} playsInline muted autoPlay />
             <div className={`frame${scanning ? ' auto' : ''}${autoStatus?.state === 'seen' ? ' seen' : ''}`} ref={frame}>
@@ -291,12 +344,39 @@ export function ScanPanel() {
             )}
             {phase === 'starting' && <div className="vf-msg">Starting camera…</div>}
           </div>
+          {stack && (
+            <div className="stack-bar">
+              <div className="stack-last" aria-live="polite">
+                {lastEntry ? (
+                  <>
+                    <span className="stack-name">
+                      ✓ {lastAdded?.more ? 'Another' : 'Added'} <strong>{lastEntry.card.name}</strong>
+                      <span className="faint">
+                        {' '}
+                        · {lastEntry.card.setName} #{cardNumberText(lastEntry.card.number, lastEntry.card.setTotal)}
+                      </span>
+                    </span>
+                    <button type="button" className="link" onClick={() => scanList.undo()}>
+                      Undo
+                    </button>
+                  </>
+                ) : (
+                  <span className="muted small">{inList ? 'Show the next card.' : 'Each card found goes in the list.'}</span>
+                )}
+              </div>
+              {inList > 0 && (
+                <a className="btn small primary" href={href('add', 'list')}>
+                  List · {inList} →
+                </a>
+              )}
+            </div>
+          )}
           <div className="scan-status">
             <button type="button" className={`auto-toggle${auto ? ' on' : ''}`} aria-pressed={auto} onClick={toggleAuto}>
               Auto-scan
             </button>
             <p className="muted small" aria-live="polite">
-              {statusText(auto, autoStatus)}
+              {statusText(auto, autoStatus, stack)}
             </p>
           </div>
           <div className="scan-controls">
@@ -369,14 +449,20 @@ export function ScanPanel() {
               <pre>{results.rawText}</pre>
             </details>
           )}
-          {best && <BestMatch candidate={best} auto={results.auto} owned={owned(best)} />}
+          {best && <BestMatch candidate={best} auto={results.auto} owned={owned(best)} stack={stack} onPick={pick} />}
           {others.length > 0 && (
             <>
               <h2>{best ? 'Not it? Other matches' : 'Which card is it?'}</h2>
-              {!best && <p className="muted small">Tap the matching card to see its prices and add it — nothing is saved until you confirm.</p>}
+              {!best && (
+                <p className="muted small">
+                  {stack
+                    ? 'Tap the matching card to put it in the list.'
+                    : 'Tap the matching card to see its prices and add it — nothing is saved until you confirm.'}
+                </p>
+              )}
               <div className="grid">
                 {others.map((c) => (
-                  <MatchTile key={c.card.id} candidate={c} owned={owned(c)} />
+                  <MatchTile key={c.card.id} candidate={c} owned={owned(c)} onPick={pick} />
                 ))}
               </div>
             </>
@@ -394,8 +480,14 @@ export function ScanPanel() {
 
 const openCard = (id: string) => navigate(`/card/${encodeURIComponent(id)}`);
 
-/** The card the scanner is confident about, shown big with a way straight to its prices. */
-function BestMatch({ candidate, auto, owned }: { candidate: Candidate; auto: boolean; owned: number }) {
+interface PickProps {
+  candidate: Candidate;
+  owned: number;
+  onPick: (card: CatalogCard) => void;
+}
+
+/** The card the scanner is confident about, shown big with a way straight to its prices (or into the list). */
+function BestMatch({ candidate, auto, owned, stack, onPick }: PickProps & { auto: boolean; stack: boolean }) {
   const { card } = candidate;
   const button = useRef<HTMLButtonElement>(null);
   // Found without a tap: move focus here so screen readers announce the card.
@@ -405,7 +497,7 @@ function BestMatch({ candidate, auto, owned }: { candidate: Candidate; auto: boo
   return (
     <section className={`best-match${auto ? ' auto' : ''}`}>
       <h2>{auto ? '✓ Found it' : 'Best match'}</h2>
-      <button ref={button} className="best-card" onClick={() => openCard(card.id)}>
+      <button ref={button} className="best-card" onClick={() => onPick(card)}>
         <div className="tile-img">
           <CardImage base={card.image} name={card.name} subtitle={card.set.name} setId={card.set.id} number={card.number} eager />
           {owned > 0 && <span className="badge owned-badge">Owned ×{owned}</span>}
@@ -418,18 +510,20 @@ function BestMatch({ candidate, auto, owned }: { candidate: Candidate; auto: boo
             {card.rarity && ` · ${card.rarity}`}
           </div>
           {card.artist && <div className="faint small">🖌 {card.artist}</div>}
-          <span className="btn primary small">See prices &amp; add</span>
+          <span className="btn primary small">{stack ? 'Add to list' : 'See prices & add'}</span>
         </div>
       </button>
-      <p className="faint small">Matched {candidate.why.join(' + ')}. Nothing is saved until you confirm.</p>
+      <p className="faint small">
+        Matched {candidate.why.join(' + ')}. Nothing is saved until you {stack ? 'add the list' : 'confirm'}.
+      </p>
     </section>
   );
 }
 
-function MatchTile({ candidate, owned }: { candidate: Candidate; owned: number }) {
+function MatchTile({ candidate, owned, onPick }: PickProps) {
   const { card } = candidate;
   return (
-    <button className="tile as-button" onClick={() => openCard(card.id)}>
+    <button className="tile as-button" onClick={() => onPick(card)}>
       <div className="tile-img">
         <CardImage base={card.image} name={card.name} subtitle={card.set.name} setId={card.set.id} number={card.number} />
         {owned > 0 && <span className="badge owned-badge">Owned ×{owned}</span>}
