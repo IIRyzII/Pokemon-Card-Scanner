@@ -1,7 +1,7 @@
 // One binder as it is on the shelf, page by page: the cards you have in colour, the rest greyed
 // out, each pocket noting its printing. Or the list of what's still missing and where it goes.
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { BINDER_COLOURS, POCKET_LAYOUTS, colourOf, type Pockets } from '../../../shared/binders.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import type { Binder } from '../../../shared/types.ts';
@@ -10,7 +10,17 @@ import { CardImage } from '../components/CardImage.tsx';
 import { IconBack, IconEdit } from '../components/Icons.tsx';
 import { ProgressBar } from '../components/ProgressBar.tsx';
 import { api } from '../lib/api.ts';
-import { binderStats, missingOf, ownedPrintings, pagesOf, percentFilled, pocketsOf, printingNote, type Pocket } from '../lib/binders.ts';
+import {
+  binderStats,
+  fixBinderPrintings,
+  missingOf,
+  ownedPrintings,
+  pagesOf,
+  percentFilled,
+  pocketsOf,
+  printingNote,
+  type Pocket,
+} from '../lib/binders.ts';
 import type { Catalog, CatalogCard } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
@@ -40,8 +50,11 @@ export function BinderPage({ id }: { id: string }) {
     );
   }, [id]);
 
-  const owned = useMemo(() => ownedPrintings(data?.items ?? []), [data]);
-  const pockets = useMemo(() => (binder ? pocketsOf(binder.cards, owned) : []), [binder, owned]);
+  // Printings a card doesn't come in (saved before they were known) count as its main one.
+  const known = useCallback((cardId: string) => catalog?.byId.get(cardId)?.variants ?? null, [catalog]);
+  const cards = useMemo(() => (binder ? fixBinderPrintings(binder.cards, known) : []), [binder, known]);
+  const owned = useMemo(() => ownedPrintings(data?.items ?? [], known), [data, known]);
+  const pockets = useMemo(() => pocketsOf(cards, owned), [cards, owned]);
 
   if (error || !binder) {
     return (
@@ -57,7 +70,7 @@ export function BinderPage({ id }: { id: string }) {
   const perPage = binder.pockets;
   const columns = POCKET_LAYOUTS[perPage as Pockets] ?? 3;
   const pages = pagesOf(pockets, perPage);
-  const missing = missingOf(binder.cards, pockets, perPage);
+  const missing = missingOf(cards, pockets, perPage);
   const priceOf = priceLookup(prices, convert);
   const card = (cardId: string) => catalog?.byId.get(cardId);
   const priceOfId = (cardId: string) => {

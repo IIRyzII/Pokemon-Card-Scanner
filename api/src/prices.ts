@@ -50,15 +50,24 @@ async function getSetInfo(env: Env, setId: string): Promise<TcgdexSetInfo | null
   }
 }
 
+/** Bumped when card details are worked out differently, so cached ones are fetched again. */
+const CARD_CACHE_VERSION = 2; // 2: printings TCGdex only guessed are left open
+
+type CachedCard = CardInfo & { cacheVersion?: number };
+
 /** Card details from our cache, fetched from TCGdex when missing or a week old. */
 export async function getCard(env: Env, cardId: string): Promise<CardInfo> {
-  const hit = await cached<CardInfo>(env, cardId, CARD_TTL_MS);
-  if (hit?.fresh) return hit.data;
+  const hit = await cached<CachedCard>(env, cardId, CARD_TTL_MS);
+  const cachedCard = () => {
+    const { cacheVersion: _, ...card } = hit!.data;
+    return card;
+  };
+  if (hit?.fresh && hit.data.cacheVersion === CARD_CACHE_VERSION) return cachedCard();
   try {
     const result = await refreshMarketPrices(env, cardId, !hit);
     return result.card;
   } catch (err) {
-    if (hit) return hit.data; // stale beats nothing
+    if (hit) return cachedCard(); // stale beats nothing
     throw err;
   }
 }
@@ -104,7 +113,7 @@ export async function refreshMarketPrices(env: Env, cardId: string, first = fals
   const now = nowIso();
   const rows = extractPrices(raw, now);
   await env.DB.batch([
-    cacheStmt(env, cardId, card),
+    cacheStmt(env, cardId, { ...card, cacheVersion: CARD_CACHE_VERSION }),
     // Replace each source's rows with what it reports now (dropping printings it no longer lists).
     // A source missing from the response keeps the prices we had.
     ...reportedSources(raw).map((source) =>

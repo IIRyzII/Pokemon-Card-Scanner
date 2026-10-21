@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { cardNumberText } from '../../../shared/links.ts';
+import { preferPrintings } from '../../../shared/printings.ts';
 import type { CardDetailResponse, ItemFields } from '../../../shared/types.ts';
 import { valueItem } from '../../../shared/values.ts';
 import { CardImage } from '../components/CardImage.tsx';
@@ -16,6 +17,7 @@ import { useCurrency } from '../lib/currency.tsx';
 import { money } from '../lib/format.ts';
 import { href, navigate } from '../lib/router.ts';
 import { copiesIn, scanList, setStackMode, useScanList, type ListEntry } from '../lib/scanList.ts';
+import { useCatalog } from '../lib/useCatalog.ts';
 
 const FETCH_AT_ONCE = 3;
 
@@ -31,6 +33,10 @@ export function ScanListPanel() {
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState<{ done: number; total: number } | null>(null);
   const asked = useRef(new Set<string>());
+  // The catalog knows (or has worked out) printings TCGdex doesn't: its best guess comes first.
+  const { catalog } = useCatalog();
+  const catalogRef = useRef(catalog);
+  catalogRef.current = catalog;
 
   // Each card's printings (the catalog doesn't know them) and prices, from our API, a few at a time.
   useEffect(() => {
@@ -42,7 +48,7 @@ export function ScanListPanel() {
       if (!id) return;
       try {
         const detail = await api.card(id);
-        scanList.setVariants(id, detail.card.variants);
+        scanList.setVariants(id, preferPrintings(detail.card.variants, catalogRef.current?.byId.get(id)?.variants));
         setDetails((m) => new Map(m).set(id, detail));
       } catch {
         setUnreachable((s) => new Set(s).add(id));

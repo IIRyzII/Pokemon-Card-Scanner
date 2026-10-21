@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MAX_COPIES, POCKET_LAYOUTS, POCKET_SIZES, colourOf, type BinderColour, type Pockets } from '../../../shared/binders.ts';
 import { VARIANTS } from '../../../shared/grading.ts';
 import { cardNumberText } from '../../../shared/links.ts';
+import { fixPrinting } from '../../../shared/printings.ts';
 import type { Binder, BinderCard } from '../../../shared/types.ts';
 import { CardImage } from '../components/CardImage.tsx';
 import { ColourPicker } from '../components/ColourPicker.tsx';
@@ -50,6 +51,14 @@ export function BinderEditPage({ id }: { id: string }) {
       (err: Error) => setError(err.message),
     );
   }, [id]);
+
+  // Printings a card doesn't come in (saved before they were known) become its main one, so saving fixes them.
+  const fixed = useRef(false);
+  useEffect(() => {
+    if (!catalog || !binder || fixed.current) return;
+    fixed.current = true;
+    setLines((ls) => ls.map((l) => ({ ...l, variant: fixPrinting(l.variant, catalog.byId.get(l.cardId)?.variants) })));
+  }, [catalog, binder]);
 
   const results = useMemo(() => (catalog && query.trim() ? searchCards(catalog, query, 12) : []), [catalog, query]);
 

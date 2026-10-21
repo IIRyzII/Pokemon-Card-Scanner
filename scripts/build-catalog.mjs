@@ -22,6 +22,7 @@ import path from 'node:path';
 import jpeg from 'jpeg-js';
 import { cardPrint, PRINT_SPEC, PRINT_WORDS } from '../shared/cardprint.ts';
 import { VARIANTS } from '../shared/grading.ts';
+import { inferPrintings } from '../shared/printings.ts';
 import { extractPrices, reportedSources, standardPrice } from '../shared/market.ts';
 
 const API = 'https://api.tcgdex.net/v2/en';
@@ -114,6 +115,44 @@ const artistKey = (name) => name.toLowerCase().normalize('NFKD').replace(/[̀-ͯ
 const isMixedCase = (s) => s !== s.toLowerCase() && s !== s.toUpperCase();
 const titleCase = (s) => s.toLowerCase().replace(/(^|[\s\-.'"(])(\p{L})/gu, (_, a, b) => a + b.toUpperCase());
 
+// Open card data whose rarities tell holo rares from plain ones ("Rare Holo" / "Rare"), which
+// TCGdex's don't for the sets it has no printings for. Static files on GitHub, no API.
+const PTCG_DATA = 'https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master';
+const PTCG_SET_IDS = { 'sm3.5': 'sm35', 'sm7.5': 'sm75' };
+/** "SV01" → "SV1", "025" → "25": card numbers as both sources can agree on. */
+const numberKey = (n) => String(n).toUpperCase().replace(/(^|[A-Z])0+(?=\d)/g, '$1');
+
+/**
+ * TCGdex has no printing data for some sets: it marks every card in them "normal" (most Black &
+ * White, XY and Sun & Moon sets). Their printings are worked out from each card's rarity instead.
+ */
+async function inferMissingPrintings(sets, cards, variantBits, rarityByCard) {
+  const bySet = new Map();
+  for (const c of cards) bySet.set(c.setId, [...(bySet.get(c.setId) ?? []), c]);
+  const missing = [...bySet].filter(([, list]) => list.every((c) => ((variantBits.get(c.id) ?? 0) & ~1) === 0)).map(([id]) => id);
+  if (!missing.length) return;
+  console.log(`Working out printings for ${missing.length} sets TCGdex has none for…`);
+  const ptcgSets = (await getJSON(`${PTCG_DATA}/sets/en.json`).catch(() => null)) ?? [];
+  const ptcgIds = new Set(ptcgSets.map((s) => s.id));
+  const ptcgByName = new Map(ptcgSets.map((s) => [s.name.toLowerCase(), s.id]));
+  let fromPtcg = 0;
+  let inferred = 0;
+  await pool(missing, CONCURRENCY, async (setId) => {
+    const name = sets.find((s) => s.id === setId)?.name?.toLowerCase();
+    const ptcgId = PTCG_SET_IDS[setId] ?? (ptcgIds.has(setId) ? setId : ptcgByName.get(name));
+    const ptcgCards = ptcgId ? ((await getJSON(`${PTCG_DATA}/cards/en/${ptcgId}.json`).catch(() => null)) ?? []) : [];
+    const rarityByNumber = new Map(ptcgCards.map((c) => [numberKey(c.number), c.rarity]));
+    for (const c of bySet.get(setId)) {
+      const ptcgRarity = rarityByNumber.get(numberKey(c.localId));
+      if (ptcgRarity) fromPtcg++;
+      const printings = inferPrintings({ setId, name: c.name, rarity: ptcgRarity ?? rarityByCard.get(c.id) ?? null });
+      variantBits.set(c.id, printings.reduce((bits, v) => bits | (1 << VARIANTS.indexOf(v)), 0));
+      inferred++;
+    }
+  });
+  console.log(`  ${inferred} cards (${fromPtcg} with pokemon-tcg-data's rarity, the rest with TCGdex's)`);
+}
+
 async function build() {
   console.log('Fetching sets…');
   const { sets: rawSets } = await graphql(
@@ -177,6 +216,7 @@ async function build() {
     for (const row of rows ?? []) if (cardIds.has(row.id)) variantBits.set(row.id, (variantBits.get(row.id) ?? 0) | (1 << bit));
   });
   console.log(`  ${variantBits.size} cards with known printings`);
+  await inferMissingPrintings(sets, cards, variantBits, rarityByCard);
 
   // Group artist spellings ("MIKI KUDO", "miki kudo", "Miki Kudo") under one display name.
   const spellings = new Map(); // key -> Map(spelling -> count)

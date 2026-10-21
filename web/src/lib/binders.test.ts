@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { binderCards, binderStats, missingOf, percentFilled, ownedPrintings, pagesOf, pocketsOf, pokemonCardsOf, printingsOf, setCardsOf } from './binders.ts';
+import { binderCards, binderStats, fixBinderPrintings, missingOf, percentFilled, ownedPrintings, pagesOf, pocketsOf, pokemonCardsOf, printingsOf, setCardsOf } from './binders.ts';
 import { buildCatalog, type CatalogJson } from './catalog.ts';
 
 // Runs against the real generated catalog (npm run catalog).
@@ -106,4 +106,30 @@ test('percent filled never says 0% once something is in, nor 100% until full', (
   assert.equal(percentFilled({ filled: 265, pockets: 266 }), '99%');
   assert.equal(percentFilled({ filled: 266, pockets: 266 }), '100%');
   assert.equal(percentFilled({ filled: 0, pockets: 0 }), '0%');
+});
+
+test('a Shuckle-GX saved as "normal" before its printings were known fills a holo pocket', () => {
+  const known = (id: string) => ({ 'sm8-17': ['holo'], 'sm8-16': ['normal', 'reverse'] })[id] ?? null;
+  const owned = ownedPrintings(
+    [
+      { cardId: 'sm8-17', variant: 'normal', quantity: 2 },
+      { cardId: 'sm8-16', variant: 'reverse', quantity: 1 },
+      { cardId: 'unknown-1', variant: 'normal', quantity: 1 },
+    ],
+    known,
+  );
+  assert.deepEqual(Object.fromEntries(owned), { 'sm8-17|holo': 2, 'sm8-16|reverse': 1, 'unknown-1|normal': 1 });
+  // …and a binder made then, with the GX as "normal", now wants the holo
+  const cards = fixBinderPrintings(
+    [
+      { cardId: 'sm8-17', variant: 'normal', copies: 9 },
+      { cardId: 'sm8-16', variant: 'reverse', copies: 9 },
+    ],
+    known,
+  );
+  assert.deepEqual(
+    cards.map((c) => c.variant),
+    ['holo', 'reverse'],
+  );
+  assert.equal(pocketsOf(cards, owned).filter((p) => p.filled).length, 3);
 });

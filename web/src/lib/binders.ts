@@ -1,5 +1,6 @@
 // Binders: every pocket in order, page by page, and which ones the collection fills.
 
+import { fixPrinting } from '../../../shared/printings.ts';
 import type { BinderCard, CollectionItem } from '../../../shared/types.ts';
 import { normName, type Catalog, type CatalogCard } from './catalog.ts';
 
@@ -24,12 +25,29 @@ export interface Pocket {
 
 const key = (cardId: string, variant: string) => `${cardId}|${variant}`;
 
-/** Copies in the collection of each card in each printing (any condition or grade). */
-export function ownedPrintings(items: Pick<CollectionItem, 'cardId' | 'variant' | 'quantity'>[]): Map<string, number> {
+/** The printings a card comes in, by id (null when unknown). */
+export type KnownPrintings = (cardId: string) => readonly string[] | null | undefined;
+
+/**
+ * Copies in the collection of each card in each printing (any condition or grade). A copy saved in
+ * a printing its card doesn't come in counts as the card's main printing (a Shuckle-GX saved as
+ * "normal" before its printings were known is a holo).
+ */
+export function ownedPrintings(items: Pick<CollectionItem, 'cardId' | 'variant' | 'quantity'>[], known?: KnownPrintings): Map<string, number> {
   const owned = new Map<string, number>();
-  for (const i of items) owned.set(key(i.cardId, i.variant), (owned.get(key(i.cardId, i.variant)) ?? 0) + i.quantity);
+  for (const i of items) {
+    const k = key(i.cardId, known ? fixPrinting(i.variant, known(i.cardId)) : i.variant);
+    owned.set(k, (owned.get(k) ?? 0) + i.quantity);
+  }
   return owned;
 }
+
+/** A binder's cards, any printing a card doesn't come in taken as its main one (binders made before its printings were known). */
+export const fixBinderPrintings = (cards: BinderCard[], known: KnownPrintings): BinderCard[] =>
+  cards.map((c) => {
+    const variant = fixPrinting(c.variant, known(c.cardId));
+    return variant === c.variant ? c : { ...c, variant };
+  });
 
 /**
  * Every pocket, in order. Each copy in the collection fills one pocket of its card and printing,

@@ -227,6 +227,20 @@ try {
     await api('GET', `/api/binders/${spare.data.binder.id}`, { token: B, expect: 404 });
   });
 
+  await check('cards TCGdex has no printings for can be added as holos and reverse holos', async () => {
+    // Lost Thunder: TCGdex only "guesses" normal for every card in the set.
+    const gx = await api('GET', '/api/cards/sm8-17', { token: B, expect: 200 });
+    assert.ok(gx.data.card.variants.includes('holo'), JSON.stringify(gx.data.card.variants));
+    const { data } = await api('POST', '/api/collection', {
+      token: B,
+      body: { cardId: 'sm8-2', variant: 'reverse', grader: 'RAW', condition: 'NM' },
+      expect: 201,
+    });
+    assert.equal(data.item.variant, 'reverse');
+    await api('DELETE', `/api/collection/${data.item.id}`, { token: B, expect: 200 });
+    await api('DELETE', `/api/collection/${data.item.id}/purge`, { token: A, expect: 200 });
+  });
+
   await check('validation: wrong printing, bad grade, unknown card', async () => {
     await api('POST', '/api/collection', { token: B, body: { cardId: 'base1-4', variant: 'reverse' }, expect: 400 });
     await api('POST', '/api/collection', {

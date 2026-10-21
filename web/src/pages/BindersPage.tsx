@@ -1,7 +1,7 @@
 // Your real binders, on a shelf (or as a list) with how full each is and what it's worth, and
 // making a new one from a set or a Pokémon.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BINDER_COLOURS,
   MAX_COPIES,
@@ -20,7 +20,16 @@ import { BinderShelf, type ShelfItem } from '../components/BinderShelf.tsx';
 import { ColourPicker } from '../components/ColourPicker.tsx';
 import { Sheet } from '../components/Sheet.tsx';
 import { api } from '../lib/api.ts';
-import { binderCards, binderStats, ownedPrintings, percentFilled, pocketsOf, pokemonCardsOf, setCardsOf } from '../lib/binders.ts';
+import {
+  binderCards,
+  binderStats,
+  fixBinderPrintings,
+  ownedPrintings,
+  percentFilled,
+  pocketsOf,
+  pokemonCardsOf,
+  setCardsOf,
+} from '../lib/binders.ts';
 import type { Catalog, CatalogCard } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
@@ -58,7 +67,8 @@ export function BindersPage() {
   const [creating, setCreating] = useState(false);
   const [view, setViewState] = useState(readView);
   const canEdit = hasRole(user?.role, 'editor');
-  const owned = useMemo(() => ownedPrintings(data?.items ?? []), [data]);
+  const known = useCallback((cardId: string) => catalog?.byId.get(cardId)?.variants ?? null, [catalog]);
+  const owned = useMemo(() => ownedPrintings(data?.items ?? [], known), [data, known]);
   const money = (v: number) => format(v, currency, { round: true });
 
   useEffect(() => {
@@ -79,8 +89,12 @@ export function BindersPage() {
   }, [prices, catalog, convert]);
 
   const items: ShelfItem[] = useMemo(
-    () => (binders ?? []).map((binder) => ({ binder, stats: binderStats(pocketsOf(binder.cards, owned), binder.pockets, priceOf) })),
-    [binders, owned, priceOf],
+    () =>
+      (binders ?? []).map((binder) => ({
+        binder,
+        stats: binderStats(pocketsOf(fixBinderPrintings(binder.cards, known), owned), binder.pockets, priceOf),
+      })),
+    [binders, owned, priceOf, known],
   );
 
   function setView(v: 'shelf' | 'list') {

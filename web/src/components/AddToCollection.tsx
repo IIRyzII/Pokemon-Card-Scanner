@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import { entryFor } from '../../../shared/copies.ts';
 import { gradeText } from '../../../shared/grading.ts';
+import { preferPrintings } from '../../../shared/printings.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import type { CardDetailResponse, CardInfo, ItemFields } from '../../../shared/types.ts';
 import { valueItem } from '../../../shared/values.ts';
 import { api } from '../lib/api.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
+import { useCatalog } from '../lib/useCatalog.ts';
 import { money, shortDate } from '../lib/format.ts';
 import { navigate } from '../lib/router.ts';
 import { CardImage } from './CardImage.tsx';
@@ -25,8 +27,11 @@ interface Props {
 
 export function AddToCollection({ card, detail, onClose }: Props) {
   const { ctx, currency } = useCurrency();
+  const { catalog } = useCatalog();
+  // The catalog knows (or has worked out) printings TCGdex doesn't: its best guess comes first.
+  const printings = preferPrintings(card.variants, catalog?.byId.get(card.id)?.variants);
   const [step, setStep] = useState<'details' | 'confirm'>('details');
-  const [fields, setFields] = useState<ItemFields>(() => defaultFields(card.variants, currency));
+  const [fields, setFields] = useState<ItemFields>(() => defaultFields(printings, currency));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useFeedback();
@@ -79,7 +84,7 @@ export function AddToCollection({ card, detail, onClose }: Props) {
             {alreadyOwned > 0 && <div className="note">You already have {alreadyOwned} of this card.</div>}
           </div>
         </div>
-        <ItemForm value={fields} onChange={setFields} variants={card.variants} />
+        <ItemForm value={fields} onChange={setFields} variants={printings} />
       </Sheet>
     );
   }

@@ -20,6 +20,8 @@ export interface TcgdexCard {
   regulationMark?: string;
   dexId?: number[];
   variants?: Record<string, boolean>;
+  /** Per printing; `variantId: "generated"` where TCGdex has no data (it then says "normal") */
+  variants_detailed?: { type: string; variantId?: string }[];
   set: { id: string; name: string; cardCount?: { official?: number; total?: number } };
   pricing?: {
     tcgplayer?: Record<string, unknown> | null;
@@ -64,7 +66,10 @@ export async function fetchTcgdexSet(env: Env, setId: string): Promise<TcgdexSet
 }
 
 export function normalizeCard(raw: TcgdexCard, set: TcgdexSetInfo | null): CardInfo {
-  const variants = VARIANTS.filter((v) => raw.variants?.[v]);
+  // TCGdex has no printings for many Black & White, XY and Sun & Moon cards: it fills in "normal"
+  // (marked "generated"), though they come as holos and reverse holos too. Treat those as unknown.
+  const guessed = !!raw.variants_detailed?.length && raw.variants_detailed.every((v) => v.variantId === 'generated');
+  const variants = guessed ? [] : VARIANTS.filter((v) => raw.variants?.[v]);
   return {
     id: raw.id,
     name: raw.name,

@@ -93,12 +93,19 @@ export function useMarketPrices(): MarketPrices | null {
   return prices;
 }
 
+/** The catalog once loaded, so components opened after that have it from their first render. */
+let loaded: Catalog | null = null;
+
 export function useCatalog(): { catalog: Catalog | null; error: string | null } {
-  const [state, setState] = useState<{ catalog: Catalog | null; error: string | null }>({ catalog: null, error: null });
+  const [state, setState] = useState<{ catalog: Catalog | null; error: string | null }>(() => ({ catalog: loaded, error: null }));
   useEffect(() => {
+    if (loaded) return;
     let alive = true;
     loadCatalog().then(
-      (catalog) => alive && setState({ catalog, error: null }),
+      (catalog) => {
+        loaded = catalog;
+        if (alive) setState({ catalog, error: null });
+      },
       (err: Error) => alive && setState({ catalog: null, error: err.message }),
     );
     return () => {
