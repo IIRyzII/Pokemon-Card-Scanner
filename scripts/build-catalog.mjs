@@ -21,6 +21,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import jpeg from 'jpeg-js';
 import { cardPrint, PRINT_SPEC, PRINT_WORDS } from '../shared/cardprint.ts';
+import { VARIANTS } from '../shared/grading.ts';
 import { extractPrices, reportedSources, standardPrice } from '../shared/market.ts';
 
 const API = 'https://api.tcgdex.net/v2/en';
@@ -167,6 +168,16 @@ async function build() {
   const categoryByCard = await facet('categories', 'category', 'categories');
   const hpByCard = await facet('hp', 'hp', 'HP values');
 
+  // Which printings each card comes in (for binders): one filtered list per printing, as bits in
+  // VARIANTS order (normal = 1, holo = 2, reverse = 4, …).
+  console.log('Mapping printings…');
+  const variantBits = new Map();
+  await pool([...VARIANTS], CONCURRENCY, async (variant, bit) => {
+    const rows = await getJSON(`${API}/cards?variants.${variant}=true`);
+    for (const row of rows ?? []) if (cardIds.has(row.id)) variantBits.set(row.id, (variantBits.get(row.id) ?? 0) | (1 << bit));
+  });
+  console.log(`  ${variantBits.size} cards with known printings`);
+
   // Group artist spellings ("MIKI KUDO", "miki kudo", "Miki Kudo") under one display name.
   const spellings = new Map(); // key -> Map(spelling -> count)
   for (const raw of artistByCard.values()) {
@@ -225,6 +236,7 @@ async function build() {
       categoryIdx.get(categoryByCard.get(c.id)) ?? -1,
       c.image ? 1 : 0,
       Number(hpByCard.get(c.id)) || 0,
+      variantBits.get(c.id) ?? 0,
     ];
   });
   rows.sort((a, b) => a[3] - b[3] || a[2].localeCompare(b[2], 'en', { numeric: true }));
@@ -234,7 +246,7 @@ async function build() {
     builtAt: new Date().toISOString(),
     source: 'TCGdex (https://tcgdex.dev) — open Pokémon TCG data',
     imageBase: IMAGE_BASE,
-    columns: ['id', 'name', 'number', 'set', 'artist', 'rarity', 'category', 'hasImage', 'hp'],
+    columns: ['id', 'name', 'number', 'set', 'artist', 'rarity', 'category', 'hasImage', 'hp', 'variants'],
     sets: outSets,
     artists,
     rarities,

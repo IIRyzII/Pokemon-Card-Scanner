@@ -29,6 +29,13 @@ export const IconSets = (p: P) => (
     <rect x="13.5" y="13" width="7.5" height="8" rx="1.5" />
   </svg>
 );
+/** A ring binder */
+export const IconBinder = (p: P) => (
+  <svg {...base(p)}>
+    <rect x="5" y="3" width="15" height="18" rx="2" />
+    <path d="M3 7h4M3 12h4M3 17h4M11 8h5M11 12h5" />
+  </svg>
+);
 /** A checklist (the scan list) */
 export const IconList = (p: P) => (
   <svg {...base(p)}>

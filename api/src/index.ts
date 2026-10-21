@@ -7,6 +7,7 @@ import { HttpError, type AppEnv, type Env } from './env.ts';
 import { scheduledRefresh } from './prices.ts';
 import admin from './routes/admin.ts';
 import auth, { API_VERSION } from './routes/auth.ts';
+import binders from './routes/binders.ts';
 import cards from './routes/cards.ts';
 import collection from './routes/collection.ts';
 import sales from './routes/sales.ts';
@@ -36,6 +37,7 @@ app.route('/api/users', users);
 app.route('/api/collection', collection);
 app.route('/api/cards', cards);
 app.route('/api/sales', sales);
+app.route('/api/binders', binders);
 app.route('/api/admin', admin);
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404));

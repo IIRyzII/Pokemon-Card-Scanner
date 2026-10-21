@@ -8,7 +8,13 @@ A phone-friendly web app for tracking a Pokémon card collection:
 - **Duplicates share one entry**: another copy of a card you already have (same printing and condition or grade) is counted with it, so you see one entry ×2, not two entries. Copies with a different price paid, purchase date, notes or a cert number keep their own entry, so those details aren't lost.
   - **Dupes** (next to All / Raw / Graded) shows only the cards you have more than one of, with how many spare copies that is and what they're worth (keeping your most valuable copy of each): your trade pile.
   - Sort by **Copies: most → least** to see the cards you have most of first, each with its total copies and value.
-  - If older duplicate entries are still separate (added before copies were counted together, or edited to match), the collection page offers to **Combine** them. The number of cards stays the same.
+  - If older duplicate entries are still separate (added before copies were counted together, or edited to match), the collection page offers to **Combine** them, and so does **Account → Duplicate entries**. The number of cards stays the same.
+- **Binders**: your real binders, page by page, under **Sets → Binders**.
+  - Make one from **a set** (every Paradox Rift card in number order, or the master set with every printing side by side), from **a Pokémon** (every Shuckle, 9 copies of each), or start empty. Pages hold 4, 9 or 12 pockets.
+  - Each pocket shows its card in colour when the collection has a copy in that printing, greyed out when it doesn't, with a footnote saying which printing goes there (Regular, Holo, Reverse Holo…). Each copy fills one pocket, so 4 Shuckles fill 4 of the 9 kept for that card.
+  - **Missing** lists what's still needed, with the page and pocket it goes in and roughly what completing the binder would cost.
+  - **Edit** changes the copies of single cards (18 of some), their printing and order, and adds cards by search. Each card shows the page and pocket it starts at.
+  - On a big screen, pages sit side by side like the open binder, page 1 opposite the inside cover.
 - Every card shows its **image, name, set, number** and **price**. Totals for the whole collection are at the top.
 - **Raw prices** (TCGplayer + Cardmarket) refresh when you open the app, and the app keeps its **own price history**.
 - **Your currency**: everything is shown in **GBP** by default. Anyone can switch to USD, EUR, CAD or AUD under **Account → Currency**.

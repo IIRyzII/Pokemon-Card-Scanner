@@ -1,6 +1,8 @@
 // Our own card catalog (built by scripts/build-catalog.mjs, served as static JSON):
 // fast offline search, artist index and the data the scanner matches against.
 
+import { VARIANTS, type Variant } from '../../../shared/grading.ts';
+
 export interface CatalogSet {
   id: string;
   name: string;
@@ -26,6 +28,8 @@ export interface CatalogCard {
   rarity: string | null;
   category: string | null;
   hp: number | null;
+  /** Printings it comes in (VARIANTS order), null when the catalog doesn't say */
+  variants: Variant[] | null;
   /** Base image URL (append /low.webp or /high.webp), null when no scan exists */
   image: string | null;
   nameKey: string;
@@ -61,7 +65,8 @@ export interface CatalogJson {
   rarities: string[];
   categories: string[];
   imageOverrides: Record<string, string>;
-  cards: [string, string, string, number, number, number, number, number, number?][];
+  /** …, hp, printings as bits in VARIANTS order (left out by catalogs built before binders) */
+  cards: [string, string, string, number, number, number, number, number, number?, number?][];
 }
 
 /** "Farfetch'd" → "farfetchd", "Flabébé" → "flabebe", "Mr. Mime" → "mr mime" */
@@ -103,7 +108,7 @@ export function buildCatalog(json: CatalogJson): Catalog {
   const bySet = new Map<string, CatalogCard[]>();
   const artistCards = new Map<string, CatalogCard[]>();
 
-  json.cards.forEach(([id, name, number, setIdx, artistIdx, rarityIdx, categoryIdx, hasImage, hp], order) => {
+  json.cards.forEach(([id, name, number, setIdx, artistIdx, rarityIdx, categoryIdx, hasImage, hp, variantBits], order) => {
     const set = sets[setIdx];
     const nameKey = normName(name);
     const card: CatalogCard = {
@@ -115,6 +120,7 @@ export function buildCatalog(json: CatalogJson): Catalog {
       rarity: rarityIdx >= 0 ? json.rarities[rarityIdx] : null,
       category: categoryIdx >= 0 ? json.categories[categoryIdx] : null,
       hp: hp || null,
+      variants: variantBits ? VARIANTS.filter((_, bit) => variantBits & (1 << bit)) : null,
       image: json.imageOverrides[id] ?? (hasImage ? `${json.imageBase}/${set.serie}/${set.id}/${number}` : null),
       nameKey,
       nameWords: nameKey.split(' ').filter(Boolean),

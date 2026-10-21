@@ -10,6 +10,9 @@ import { AddPage } from './pages/AddPage.tsx';
 import { AdminPage } from './pages/AdminPage.tsx';
 import { ArtistPage } from './pages/ArtistPage.tsx';
 import { ArtistsPage } from './pages/ArtistsPage.tsx';
+import { BinderEditPage } from './pages/BinderEditPage.tsx';
+import { BinderPage } from './pages/BinderPage.tsx';
+import { BindersPage } from './pages/BindersPage.tsx';
 import { CardPage } from './pages/CardPage.tsx';
 import { CollectionPage } from './pages/CollectionPage.tsx';
 import { ItemPage } from './pages/ItemPage.tsx';
@@ -72,6 +75,13 @@ function Shell() {
     case 'artist':
       page = <ArtistPage key={id} name={id} />;
       break;
+    case 'binders':
+      page = <BindersPage />;
+      break;
+    case 'binder':
+      if (route.parts[2] !== 'edit') page = <BinderPage key={id} id={id} />;
+      else page = canEdit ? <BinderEditPage key={id} id={id} /> : <NotAllowed />;
+      break;
     case 'trash':
       page = canEdit ? <TrashPage /> : <NotAllowed />;
       break;
@@ -104,7 +114,7 @@ function Shell() {
       <main>{page}</main>
       <nav className="tabbar" aria-label="Main">
         {tab('#/', 'Collection', <IconCards />, !section || section === 'item')}
-        {tab('#/sets', 'Sets', <IconSets />, section === 'sets' || section === 'set')}
+        {tab('#/sets', 'Sets', <IconSets />, ['sets', 'set', 'binders', 'binder'].includes(section ?? ''))}
         {canEdit && tab(href('add', 'scan'), 'Add', <IconPlus />, section === 'add' || section === 'card')}
         {tab('#/artists', 'Artists', <IconBrush />, section === 'artists' || section === 'artist')}
         {isAdmin && tab('#/admin', 'Admin', <IconShield />, section === 'admin')}

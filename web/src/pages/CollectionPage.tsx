@@ -1,12 +1,10 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
-import { planMerges } from '../../../shared/copies.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import type { CollectionItem } from '../../../shared/types.ts';
 import { hasRole } from '../../../shared/types.ts';
 import { ItemTile } from '../components/CardTile.tsx';
-import { useFeedback } from '../components/feedback.tsx';
+import { useCombineDuplicates } from '../components/CombineDuplicates.tsx';
 import { IconPlus, IconRefresh, IconSearch } from '../components/Icons.tsx';
-import { api } from '../lib/api.ts';
 import { canonicalArtist, normName, type Catalog } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
@@ -89,36 +87,13 @@ export function CollectionPage() {
   const { user } = useSession();
   const { catalog } = useCatalog();
   const { format, convert, currency } = useCurrency();
-  const { toast, confirm } = useFeedback();
   const [query, setQuery] = useState('');
   const [sort, setSortState] = useState<SortKey>(readSort);
   const [filter, setFilter] = useState<Filter>('all');
-  const [merging, setMerging] = useState(false);
   const canEdit = hasRole(user?.role, 'editor');
   const copies = useMemo(() => copiesByCard(data?.items ?? []), [data]);
-  // Entries of the same copy that could be one (made before adding counted copies together).
-  const merges = useMemo(() => planMerges(data?.items ?? []), [data]);
-  const mergeEntries = merges.reduce((n, m) => n + m.absorb.length + 1, 0);
+  const duplicates = useCombineDuplicates();
   const unitValue = useCallback((i: CollectionItem) => convert(i.value, i.valueCurrency ?? 'USD'), [convert]);
-
-  async function combine() {
-    const ok = await confirm({
-      title: 'Combine duplicate entries?',
-      body: `${mergeEntries} entries are copies of the same card with the same details. Each card's copies go into one entry, so they become ${merges.length}. The number of cards and their details stay the same.`,
-      confirmText: `Combine into ${merges.length}`,
-    });
-    if (!ok) return;
-    setMerging(true);
-    try {
-      const { groups, removed } = await api.mergeDuplicates();
-      await reload();
-      toast(`Combined ${groups + removed} entries into ${groups}`);
-    } catch (err) {
-      toast((err as Error).message, 'error');
-    } finally {
-      setMerging(false);
-    }
-  }
 
   const setSort = (s: SortKey) => {
     setSortState(s);
@@ -218,13 +193,13 @@ export function CollectionPage() {
         {s && s.unpriced > 0 && <div className="faint small">{s.unpriced} without a price yet</div>}
       </section>
 
-      {canEdit && merges.length > 0 && (
+      {canEdit && duplicates.into > 0 && (
         <div className="note merge-note">
           <span>
-            {mergeEntries} entries are copies of the same card with the same details, from before copies were counted together.
+            {duplicates.entries} entries are copies of the same card with the same details, from before copies were counted together.
           </span>
-          <button className="btn small primary" onClick={combine} disabled={merging}>
-            {merging ? 'Combining…' : `Combine into ${merges.length}`}
+          <button className="btn small primary" onClick={duplicates.combine} disabled={duplicates.merging}>
+            {duplicates.merging ? 'Combining…' : `Combine into ${duplicates.into}`}
           </button>
         </div>
       )}

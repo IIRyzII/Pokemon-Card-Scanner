@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { CURRENCIES, CURRENCY_INFO, isCurrency } from '../../../shared/currency.ts';
 import { MIN_PASSWORD_LENGTH } from '../../../shared/password.ts';
-import { ROLE_INFO } from '../../../shared/types.ts';
+import { ROLE_INFO, hasRole } from '../../../shared/types.ts';
+import { useCombineDuplicates } from '../components/CombineDuplicates.tsx';
 import { useFeedback } from '../components/feedback.tsx';
 import { api, getApiUrl } from '../lib/api.ts';
 import { useCurrency } from '../lib/currency.tsx';
@@ -97,6 +98,8 @@ export function AccountPage() {
         </p>
       </section>
 
+      {hasRole(user.role, 'editor') && <DuplicateEntries />}
+
       <section className="card-section">
         <h2>Change password</h2>
         <form className="form" onSubmit={changePassword}>
@@ -161,5 +164,26 @@ export function AccountPage() {
         Sign out
       </button>
     </div>
+  );
+}
+
+/** Combining copies of the same card that are still separate entries. */
+function DuplicateEntries() {
+  const { entries, into, combine, merging } = useCombineDuplicates();
+  return (
+    <section className="card-section">
+      <h2>Duplicate entries</h2>
+      <p className="muted small">
+        Copies of the same card with the same details (printing, condition or grade, price paid, notes) share one entry. Ones added before
+        that, or edited to match, can be combined here. The number of cards stays the same.
+      </p>
+      {into > 0 ? (
+        <button className="btn primary" onClick={combine} disabled={merging}>
+          {merging ? 'Combining…' : `Combine ${entries} entries into ${into}`}
+        </button>
+      ) : (
+        <p className="small">No duplicate entries: nothing to combine.</p>
+      )}
+    </section>
   );
 }

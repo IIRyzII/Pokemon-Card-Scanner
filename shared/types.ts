@@ -125,6 +125,26 @@ export interface CollectionResponse {
   };
 }
 
+/** A card in a binder: the next `copies` pockets hold this card in this printing. */
+export interface BinderCard {
+  cardId: string;
+  variant: string;
+  copies: number;
+}
+
+export interface Binder {
+  id: string;
+  name: string;
+  /** Pockets per page (4, 9 or 12) */
+  pockets: number;
+  /** In pocket order */
+  cards: BinderCard[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type BinderInput = Pick<Binder, 'name' | 'pockets' | 'cards'>;
+
 /** POST /api/collection/merge-duplicates: `removed` entries were combined into `groups` entries. */
 export interface MergeResponse {
   groups: number;

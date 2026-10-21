@@ -4,6 +4,8 @@ import type {
   ApiStatus,
   AuditEntry,
   AuthResponse,
+  Binder,
+  BinderInput,
   CardDetailResponse,
   CollectionItem,
   CollectionResponse,
@@ -126,6 +128,12 @@ export const api = {
 
   addSale: (input: NewSaleInput) => request<{ sale: SaleRow }>('POST', '/api/sales', input),
   deleteSale: (id: string) => request<{ ok: true }>('DELETE', `/api/sales/${enc(id)}`),
+
+  binders: () => request<{ binders: Binder[] }>('GET', '/api/binders'),
+  binder: (id: string) => request<{ binder: Binder }>('GET', `/api/binders/${enc(id)}`),
+  createBinder: (input: BinderInput) => request<{ binder: Binder }>('POST', '/api/binders', input),
+  updateBinder: (id: string, patch: Partial<BinderInput>) => request<{ binder: Binder }>('PATCH', `/api/binders/${enc(id)}`, patch),
+  deleteBinder: (id: string) => request<{ ok: true }>('DELETE', `/api/binders/${enc(id)}`),
 
   users: () => request<{ users: User[] }>('GET', '/api/users'),
   createUser: (input: { email: string; displayName: string; role: string; key: string }) =>

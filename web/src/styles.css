@@ -1150,6 +1150,144 @@ button.tile.as-button {
   grid-template-columns: 76px 1fr;
 }
 
+/* ---------- binders ---------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.nowrap {
+  white-space: nowrap;
+}
+.binder-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.binder-row:hover {
+  text-decoration: none;
+  background: var(--surface);
+}
+.binder-row .progress {
+  margin-top: 6px;
+}
+.binder-count {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.binder-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.binder-head h1 {
+  margin-bottom: 2px;
+}
+.binder-pages {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+.binder-cover {
+  display: none;
+}
+@media (min-width: 900px) {
+  /* An open binder: two pages side by side, page 1 on the right of the inside cover. */
+  .binder-pages {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 10px;
+  }
+  .binder-cover {
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius);
+    border: 1px dashed var(--border);
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    color: var(--faint);
+    font-weight: 700;
+  }
+}
+.binder-page {
+  padding: 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.binder-page-no {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.pockets {
+  display: grid;
+  gap: 6px;
+}
+.pocket {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  color: var(--text);
+}
+.pocket:hover {
+  text-decoration: none;
+}
+.pocket .card-img {
+  box-shadow: none;
+}
+.pocket:not(.filled) .card-img {
+  filter: grayscale(1);
+  opacity: 0.35;
+}
+.pocket.spare {
+  aspect-ratio: 63 / 88;
+  border: 1px dashed var(--border);
+  border-radius: 4.5% / 3.2%;
+}
+.pocket-note {
+  overflow: hidden;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pocket.filled .pocket-note {
+  font-weight: 700;
+}
+.all-copies {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.scan-entry-actions.wrap {
+  flex-wrap: wrap;
+}
+.scan-entry-actions select {
+  width: auto;
+  min-height: 34px;
+  padding: 4px 8px;
+}
+.add-results {
+  margin-bottom: 8px;
+}
+
 /* ---------- scan list ---------- */
 
 .tab-count {
