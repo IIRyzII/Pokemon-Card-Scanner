@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cardNumberText } from '../../../shared/links.ts';
 import { CardImage } from '../components/CardImage.tsx';
+import { variantLabel } from '../components/CardTile.tsx';
 import { IconCamera, IconImage } from '../components/Icons.tsx';
 import { defaultFields } from '../components/ItemForm.tsx';
 import type { CatalogCard } from '../lib/catalog.ts';
@@ -71,7 +72,7 @@ function statusText(auto: boolean, status: AutoStatus | null, stack: boolean): s
       ? 'Show a card, keep it flat and avoid glare, then press the button to put it in the list.'
       : 'Show the card to the camera, keep it flat and avoid glare, then press the button.';
   }
-  if (stack && status?.state === 'repeat') return `${status.name} is in the list. Show the next card.`;
+  if (stack && status?.state === 'repeat') return `Take ${status.name} away and show the next card.`;
   switch (status?.state) {
     case 'loading':
       return 'Getting the card reader ready…';
@@ -111,6 +112,8 @@ export function ScanPanel() {
   const [torch, setTorch] = useState<boolean | null>(null);
   const [auto, setAuto] = useState(readAuto);
   const [stack, setStack] = useState(stackMode);
+  /** Scanning a stack: the card just found and its other matches, waiting for a yes */
+  const [found, setFound] = useState<Candidate[] | null>(null);
 
   const stopCamera = useCallback(() => {
     stream.current?.getTracks().forEach((t) => t.stop());
@@ -165,18 +168,30 @@ export function ScanPanel() {
     };
   }, [startCamera, stopCamera, restored]);
 
-  /** Scanning a stack: puts the card in the list. (Nothing is saved until the list is added.) */
-  function addToList(card: CatalogCard) {
-    scanList.add(listCardOf(card), defaultFields([], currency));
-    markFound(card.id);
-    navigator.vibrate?.(40);
+  /**
+   * Scanning a stack: the card found (or the right one of its matches) goes in the list, after a
+   * quick yes; its printing, condition and so on are changed in the list later. Nothing is saved
+   * until the list is added.
+   */
+  function confirmFind(card: CatalogCard, printing?: string) {
+    if (!found) return;
+    const fields = defaultFields(card.variants ?? [], currency);
+    scanList.add(listCardOf(card), printing ? { ...fields, variant: printing } : fields);
+    markFound(found[0].card.id); // what the scanner sees: not offered again until it leaves the view
+    setFound(null);
+  }
+
+  function skipFind() {
+    if (found) markFound(found[0].card.id);
+    setFound(null);
   }
 
   function show(r: Results) {
     if (!mounted.current) return; // the read finished after leaving the scanner
     if (stack && r.confidence === 'sure') {
-      // Certain: straight into the list, and on to the next card.
-      addToList(r.candidates[0].card);
+      // Certain: ask before it goes in the list, with the camera back on for the next card.
+      navigator.vibrate?.(40);
+      setFound(r.candidates.slice(0, 5));
       void startCamera();
       return;
     }
@@ -189,13 +204,13 @@ export function ScanPanel() {
   }
 
   const { status: autoStatus, outline } = useAutoScan({
-    active: auto && phase === 'live',
+    active: auto && phase === 'live' && !found,
     catalog,
     video,
     frame,
     onFound: (reading) => {
-      if (stack) return addToList(reading.candidates[0].card); // the camera carries on
       navigator.vibrate?.(40);
+      if (stack) return setFound(reading.candidates.slice(0, 5)); // ask, with the camera still running
       show(resultsOf(reading, true));
     },
     keepGoing: stack,
@@ -267,6 +282,7 @@ export function ScanPanel() {
   function chooseStack(on: boolean) {
     setStack(on);
     setStackMode(on);
+    setFound(null);
   }
 
   function scanAgain() {
@@ -280,7 +296,8 @@ export function ScanPanel() {
   /** A match was tapped: its page (to see prices and add it), or when scanning a stack, into the list. */
   function pick(card: CatalogCard) {
     if (!stack) return openCard(card.id);
-    addToList(card);
+    scanList.add(listCardOf(card), defaultFields(card.variants ?? [], currency)); // tapping it was the yes
+    navigator.vibrate?.(40);
     scanAgain();
   }
 
@@ -343,6 +360,7 @@ export function ScanPanel() {
               </svg>
             )}
             {phase === 'starting' && <div className="vf-msg">Starting camera…</div>}
+            {found && <FindPrompt candidates={found} owned={owned} onAdd={confirmFind} onSkip={skipFind} />}
           </div>
           {stack && (
             <div className="stack-bar">
@@ -361,7 +379,7 @@ export function ScanPanel() {
                     </button>
                   </>
                 ) : (
-                  <span className="muted small">{inList ? 'Show the next card.' : 'Each card found goes in the list.'}</span>
+                  <span className="muted small">{inList ? 'Show the next card.' : 'Each card found asks before it goes in the list.'}</span>
                 )}
               </div>
               {inList > 0 && (
@@ -376,7 +394,7 @@ export function ScanPanel() {
               Auto-scan
             </button>
             <p className="muted small" aria-live="polite">
-              {statusText(auto, autoStatus, stack)}
+              {found ? 'Add it to the list, or tap Not it.' : statusText(auto, autoStatus, stack)}
             </p>
           </div>
           <div className="scan-controls">
@@ -386,7 +404,7 @@ export function ScanPanel() {
             <button
               className="shutter"
               aria-label="Capture card"
-              disabled={phase !== 'live' || !catalog}
+              disabled={phase !== 'live' || !catalog || !!found}
               onClick={shutter}
             >
               <IconCamera />
@@ -536,5 +554,92 @@ function MatchTile({ candidate, owned, onPick }: PickProps) {
         <div className="tile-meta faint">matched {candidate.why.join(' + ')}</div>
       </div>
     </button>
+  );
+}
+
+/**
+ * Scanning a stack: a quick yes before a found card goes in the list (its details are changed in
+ * the list later). "Not it" shows its other matches to tap instead, or skips it.
+ */
+function FindPrompt({
+  candidates,
+  owned,
+  onAdd,
+  onSkip,
+}: {
+  candidates: Candidate[];
+  owned: (c: Candidate) => number;
+  onAdd: (card: CatalogCard, printing?: string) => void;
+  onSkip: () => void;
+}) {
+  const [best, ...others] = candidates;
+  const [choosing, setChoosing] = useState(false);
+  const { card } = best;
+  // Which printing this copy is (a reverse holo among holos), when the card comes in more than one
+  const printings = card.variants ?? [];
+  const [printing, setPrinting] = useState(printings[0]);
+  const n = owned(best);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onSkip();
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [onSkip]);
+  return (
+    <div className="find-prompt" role="dialog" aria-label={`Add ${card.name} to the list?`}>
+      {!choosing ? (
+        <>
+          <div className="find-card">
+            <CardImage base={card.image} name={card.name} setId={card.set.id} number={card.number} eager />
+            <div>
+              <div className="find-name">{card.name}</div>
+              <div className="small">
+                {card.set.name} · #{cardNumberText(card.number, card.set.official)}
+              </div>
+              {n > 0 && <div className="small">You have {n}</div>}
+            </div>
+          </div>
+          {printings.length > 1 && (
+            <div className="find-printings" role="group" aria-label="Printing">
+              {printings.map((v) => (
+                <button key={v} type="button" className={printing === v ? 'on' : ''} aria-pressed={printing === v} onClick={() => setPrinting(v)}>
+                  {variantLabel(v)}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="find-actions">
+            <button className="btn primary" autoFocus onClick={() => onAdd(card, printing)}>
+              ✓ Add to list
+            </button>
+            <button className="btn" onClick={() => (others.length ? setChoosing(true) : onSkip())}>
+              Not it
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="small">Which card is it?</div>
+          <div className="find-alts">
+            {others.map((c) => (
+              <button
+                key={c.card.id}
+                type="button"
+                className="find-alt"
+                onClick={() => onAdd(c.card)}
+                aria-label={`${c.card.name}, ${c.card.set.name} #${cardNumberText(c.card.number, c.card.set.official)}`}
+              >
+                <CardImage base={c.card.image} name={c.card.name} setId={c.card.set.id} number={c.card.number} />
+                <span>{c.card.set.name}</span>
+              </button>
+            ))}
+          </div>
+          <div className="find-actions">
+            <button className="btn" autoFocus onClick={onSkip}>
+              Skip — none of these
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

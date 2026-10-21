@@ -3,6 +3,7 @@
 
 import { useSyncExternalStore } from 'react';
 import type { ItemFields } from '../../../shared/types.ts';
+import { sameCopy } from '../../../shared/copies.ts';
 import type { CatalogCard } from './catalog.ts';
 
 /** What the list shows of a card (a copy, so it doesn't need the catalog). */
@@ -36,9 +37,13 @@ export interface LastAdded {
   more: boolean;
 }
 
-/** Adds a card. Another copy of a card already in the list counts that entry up instead. */
+/**
+ * Adds a card. Another copy the same as one already in the list (same printing, condition and so
+ * on, as the collection counts copies) counts that entry up instead; a different printing of the
+ * same card (a reverse holo among holos) gets an entry of its own.
+ */
 export function addCard(list: ListEntry[], card: ListCard, fields: ItemFields, key: string): { list: ListEntry[]; entry: ListEntry; more: boolean } {
-  const same = list.find((e) => e.card.id === card.id);
+  const same = list.find((e) => e.card.id === card.id && sameCopy(e.fields, fields));
   if (same) {
     const entry = { ...same, fields: { ...same.fields, quantity: Math.min(999, same.fields.quantity + 1) }, error: undefined };
     return { list: list.map((e) => (e === same ? entry : e)), entry, more: true };
@@ -54,15 +59,39 @@ export function takeBack(list: ListEntry[], key: string, more: boolean): ListEnt
 }
 
 /**
- * Records which printings a card comes in. The first time, entries start on the first printing
- * (as adding a single card does); after that they only move off one the card doesn't have.
+ * Records which printings a card comes in (from the API), moving entries off a printing the card
+ * doesn't have onto its first. The printing picked when scanning stays.
  */
 export function withVariants(list: ListEntry[], cardId: string, variants: string[]): ListEntry[] {
   return list.map((e) => {
     if (e.card.id !== cardId) return e;
-    const keep = !variants.length || (e.variants !== null && variants.includes(e.fields.variant));
+    const keep = !variants.length || variants.includes(e.fields.variant);
     return { ...e, variants, fields: keep ? e.fields : { ...e.fields, variant: variants[0] } };
   });
+}
+
+/**
+ * Splits an entry's copies across printings (`counts`: printing → copies; 4 holo + 1 reverse, say).
+ * Each printing kept gets an entry in the same place (the one it already had keeps its key); one
+ * the same as an entry already in the list is counted into it.
+ */
+export function splitEntry(list: ListEntry[], key: string, counts: Record<string, number>, newKey: () => string): ListEntry[] {
+  const at = list.findIndex((e) => e.key === key);
+  if (at < 0) return list;
+  const entry = list[at];
+  const rest = list.filter((e) => e !== entry).map((e) => ({ ...e })); // copies, to count into
+  const parts: ListEntry[] = [];
+  for (const [variant, n] of Object.entries(counts)) {
+    if (n < 1) continue;
+    const fields = { ...entry.fields, variant, quantity: Math.min(999, n) };
+    const same = rest.find((e) => e.card.id === entry.card.id && sameCopy(e.fields, fields));
+    if (same) {
+      same.fields = { ...same.fields, quantity: Math.min(999, same.fields.quantity + n) };
+      continue;
+    }
+    parts.push({ ...entry, key: variant === entry.fields.variant ? entry.key : newKey(), fields, error: undefined });
+  }
+  return [...rest.slice(0, at), ...parts, ...rest.slice(at)];
 }
 
 /** The parts of a catalog card the list keeps. */
@@ -127,6 +156,10 @@ export const scanList = {
   },
   setVariants(cardId: string, variants: string[]) {
     set(withVariants(entries, cardId, variants));
+  },
+  split(key: string, counts: Record<string, number>) {
+    if (lastAdded?.key === key) lastAdded = null;
+    set(splitEntry(entries, key, counts, newKey));
   },
   update(key: string, patch: Partial<Omit<ListEntry, 'key' | 'card'>>) {
     set(entries.map((e) => (e.key === key ? { ...e, ...patch } : e)));

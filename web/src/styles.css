@@ -1775,6 +1775,113 @@ button.tile.as-button {
 .stack-bar .btn {
   flex: none;
 }
+/* Scanning a stack: the quick yes, over the bottom of the camera view */
+.find-prompt {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 5;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(17, 19, 26, 0.9);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  animation: pop-in 0.15s ease-out;
+}
+.find-card {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+.find-card .card-img,
+.find-alt .card-img {
+  box-shadow: none;
+}
+.find-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.find-prompt .small {
+  color: rgba(255, 255, 255, 0.78);
+}
+.split-rows {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+.split-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+}
+.find-printings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.find-printings button {
+  flex: 1;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.find-printings button.on {
+  border-color: #fff;
+  background: #fff;
+  color: #15171e;
+}
+.find-actions {
+  display: flex;
+  gap: 8px;
+}
+.find-actions .btn {
+  flex: 1;
+}
+.find-actions .btn:not(.primary) {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+.find-alts {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+.find-alt {
+  flex: none;
+  display: grid;
+  gap: 3px;
+  width: 58px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.find-alt span {
+  overflow: hidden;
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.find-alt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .auto-toggle {
   flex: none;
   display: inline-flex;

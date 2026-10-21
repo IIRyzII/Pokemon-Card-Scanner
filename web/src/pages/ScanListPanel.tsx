@@ -32,6 +32,7 @@ export function ScanListPanel() {
   const [details, setDetails] = useState<ReadonlyMap<string, CardDetailResponse>>(new Map());
   const [unreachable, setUnreachable] = useState<ReadonlySet<string>>(new Set());
   const [editing, setEditing] = useState<string | null>(null);
+  const [splitting, setSplitting] = useState<string | null>(null);
   const [adding, setAdding] = useState<{ done: number; total: number } | null>(null);
   const asked = useRef(new Set<string>());
   // The catalog knows (or has worked out) printings TCGdex doesn't: its best guess comes first.
@@ -77,6 +78,13 @@ export function ScanListPanel() {
   const checking = list.some((e) => e.variants === null && !unreachable.has(e.card.id));
   const busy = adding !== null;
   const editingEntry = editing ? list.find((e) => e.key === editing) : undefined;
+  const splittingEntry = splitting ? list.find((e) => e.key === splitting) : undefined;
+  /** The printings an entry can be split into: the catalog's (known or worked out), else the API's. */
+  const printingsOf = (e: ListEntry) => {
+    const known = catalog?.byId.get(e.card.id)?.variants;
+    const all = known?.length ? [...known] : (e.variants ?? []);
+    return all.includes(e.fields.variant) ? all : [e.fields.variant, ...all];
+  };
 
   async function addAll() {
     const entries = scanList.get();
@@ -152,7 +160,7 @@ export function ScanListPanel() {
         </a>
       </div>
       <p className="faint small">
-        Nothing is saved until you add the list. Each card starts as raw, Near Mint, in its first printing; tap Edit to change that.
+        Nothing is saved until you add the list. Each card starts as raw and Near Mint, in the printing picked when scanning; tap Edit to change that, or Split to share several copies between printings.
       </p>
       {unreachable.size > 0 && (
         <p className="error small">
@@ -172,7 +180,9 @@ export function ScanListPanel() {
             owned={ownedCount(ownedByCard.get(e.card.id))}
             checking={e.variants === null && !unreachable.has(e.card.id)}
             busy={busy}
+            printings={printingsOf(e)}
             onEdit={() => setEditing(e.key)}
+            onSplit={() => setSplitting(e.key)}
           />
         ))}
       </ul>
@@ -189,6 +199,7 @@ export function ScanListPanel() {
         </button>
       </div>
       {editingEntry && <EditEntry entry={editingEntry} onClose={() => setEditing(null)} />}
+      {splittingEntry && <SplitEntry entry={splittingEntry} printings={printingsOf(splittingEntry)} onClose={() => setSplitting(null)} />}
     </>
   );
 }
@@ -200,10 +211,13 @@ interface EntryProps {
   owned: number;
   checking: boolean;
   busy: boolean;
+  /** Printings it can be split into */
+  printings: string[];
   onEdit: () => void;
+  onSplit: () => void;
 }
 
-function Entry({ entry, value, currency, owned, checking, busy, onEdit }: EntryProps) {
+function Entry({ entry, value, currency, owned, checking, busy, printings, onEdit, onSplit }: EntryProps) {
   const { card, fields } = entry;
   const setQuantity = (q: number) => scanList.update(entry.key, { fields: { ...fields, quantity: Math.min(999, Math.max(1, q)) } });
   return (
@@ -251,6 +265,11 @@ function Entry({ entry, value, currency, owned, checking, busy, onEdit }: EntryP
           <button type="button" className="btn small" onClick={onEdit} disabled={busy}>
             Edit
           </button>
+          {fields.quantity > 1 && printings.length > 1 && (
+            <button type="button" className="btn small" onClick={onSplit} disabled={busy} aria-label={`Split ${card.name} by printing`}>
+              Split
+            </button>
+          )}
           <button
             type="button"
             className="icon-btn small"
@@ -299,6 +318,71 @@ function EditEntry({ entry, onClose }: { entry: ListEntry; onClose: () => void }
         </div>
       </div>
       <ItemForm value={fields} onChange={setFields} variants={entry.variants ?? [entry.fields.variant]} />
+    </Sheet>
+  );
+}
+
+/** Several copies of a card in different printings (4 holos and a reverse holo): an entry each. */
+function SplitEntry({ entry, printings, onClose }: { entry: ListEntry; printings: string[]; onClose: () => void }) {
+  const { card, fields } = entry;
+  const [counts, setCounts] = useState<Record<string, number>>(() =>
+    Object.fromEntries(printings.map((v) => [v, v === fields.variant ? fields.quantity : 0])),
+  );
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const set = (v: string, n: number) => setCounts((c) => ({ ...c, [v]: Math.min(999, Math.max(0, n)) }));
+  function save() {
+    scanList.split(entry.key, counts);
+    onClose();
+  }
+  return (
+    <Sheet
+      title="Split by printing"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn primary" onClick={save} disabled={total === 0}>
+            Save
+          </button>
+        </>
+      }
+    >
+      <div className="mini-card">
+        <CardImage base={card.image} name={card.name} setId={card.setId} number={card.number} />
+        <div>
+          <strong>{card.name}</strong>
+          <div className="muted">
+            {card.setName} · #{cardNumberText(card.number, card.setTotal)}
+          </div>
+        </div>
+      </div>
+      <p className="muted small">How many of your {fields.quantity} are in each printing? Each printing gets its own line in the list.</p>
+      <div className="split-rows">
+        {printings.map((v) => (
+          <div key={v} className="split-row">
+            <span>{variantLabel(v)}</span>
+            <div className="stepper small">
+              <button type="button" onClick={() => set(v, counts[v] - 1)} disabled={counts[v] <= 0} aria-label={`Fewer ${variantLabel(v)}`}>
+                −
+              </button>
+              <input
+                inputMode="numeric"
+                value={counts[v]}
+                onChange={(ev) => set(v, parseInt(ev.target.value, 10) || 0)}
+                aria-label={`${variantLabel(v)} copies`}
+              />
+              <button type="button" onClick={() => set(v, counts[v] + 1)} aria-label={`More ${variantLabel(v)}`}>
+                +
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="faint small">
+        {total === fields.quantity ? `${total} copies` : `${total} copies (was ${fields.quantity})`}
+      </p>
     </Sheet>
   );
 }

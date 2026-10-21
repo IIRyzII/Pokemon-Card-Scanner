@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ItemFields } from '../../../shared/types.ts';
 import type { CatalogCard } from './catalog.ts';
-import { addCard, copiesIn, listCardOf, takeBack, withVariants, type ListCard, type ListEntry } from './scanList.ts';
+import { addCard, copiesIn, listCardOf, splitEntry, takeBack, withVariants, type ListCard, type ListEntry } from './scanList.ts';
 
 const fields = (patch: Partial<ItemFields> = {}): ItemFields => ({
   variant: 'normal',
@@ -39,10 +39,53 @@ test('a new card goes on top of the list; another copy counts its entry up', () 
   assert.equal(copiesIn(again.list), 3);
 });
 
-test('a card already in the list keeps its edited details when another copy is scanned', () => {
-  const list = addCard([], card('a'), fields({ variant: 'reverse', condition: 'LP' }), 'k1').list;
-  const { entry } = addCard(list, card('a'), fields(), 'k2');
-  assert.deepEqual([entry.fields.variant, entry.fields.condition, entry.fields.quantity], ['reverse', 'LP', 2]);
+test('copies count together only when they are the same: a reverse holo among holos gets its own entry', () => {
+  let list = addCard([], card('a'), fields({ variant: 'holo' }), 'k1').list;
+  list = addCard(list, card('a'), fields({ variant: 'holo' }), 'k2').list;
+  const r = addCard(list, card('a'), fields({ variant: 'reverse' }), 'k3');
+  assert.equal(r.more, false);
+  assert.deepEqual(
+    r.list.map((e) => [e.key, e.fields.variant, e.fields.quantity]),
+    [
+      ['k3', 'reverse', 1],
+      ['k1', 'holo', 2],
+    ],
+  );
+  // an entry changed to Lightly Played doesn't take in a Near Mint copy
+  const lp = addCard([], card('b'), fields({ condition: 'LP' }), 'k4').list;
+  assert.equal(addCard(lp, card('b'), fields(), 'k5').list.length, 2);
+});
+
+test('an entry splits across printings: 5 holos become 4 holos and a reverse holo', () => {
+  let n = 0;
+  const newKey = () => `new${++n}`;
+  const list = [
+    { key: 'x', card: card('x'), fields: fields(), variants: null },
+    { key: 'a', card: card('a'), fields: fields({ variant: 'holo', quantity: 5 }), variants: ['holo', 'reverse'] },
+    { key: 'y', card: card('y'), fields: fields(), variants: null },
+  ];
+  const split = splitEntry(list, 'a', { holo: 4, reverse: 1, normal: 0 }, newKey);
+  assert.deepEqual(
+    split.map((e) => [e.key, e.card.id, e.fields.variant, e.fields.quantity]),
+    [
+      ['x', 'x', 'normal', 1],
+      ['a', 'a', 'holo', 4],
+      ['new1', 'a', 'reverse', 1],
+      ['y', 'y', 'normal', 1],
+    ],
+    'in place, the holos keeping their entry',
+  );
+  assert.equal(list[1].fields.quantity, 5, 'the list it was given is left as it was');
+  // splitting into a printing that already has an entry counts into it
+  const again = splitEntry(split, 'a', { holo: 3, reverse: 1 }, newKey);
+  assert.deepEqual(
+    again.filter((e) => e.card.id === 'a').map((e) => [e.fields.variant, e.fields.quantity]),
+    [
+      ['holo', 3],
+      ['reverse', 2],
+    ],
+  );
+  assert.equal(split.find((e) => e.key === 'new1')!.fields.quantity, 1, 'unchanged');
 });
 
 test('undo takes a new card out, or counts another copy back down', () => {
@@ -54,7 +97,7 @@ test('undo takes a new card out, or counts another copy back down', () => {
   assert.equal(back[0].fields.quantity, 1);
 });
 
-test('the first printing the API reports is the starting one; later it only moves off one the card lacks', () => {
+test('printings from the API move an entry only off a printing the card lacks', () => {
   let list = addCard([], card('a'), fields(), 'k1').list;
   list = addCard(list, card('b'), fields(), 'k2').list;
   list = withVariants(list, 'a', ['holo', 'reverse']);
