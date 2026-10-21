@@ -2,11 +2,12 @@
 // printing, how many copies of each (9 of some Shuckles, 18 of others) and in what order.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MAX_COPIES, POCKET_LAYOUTS, POCKET_SIZES, type Pockets } from '../../../shared/binders.ts';
+import { MAX_COPIES, POCKET_LAYOUTS, POCKET_SIZES, colourOf, type BinderColour, type Pockets } from '../../../shared/binders.ts';
 import { VARIANTS } from '../../../shared/grading.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import type { Binder, BinderCard } from '../../../shared/types.ts';
 import { CardImage } from '../components/CardImage.tsx';
+import { ColourPicker } from '../components/ColourPicker.tsx';
 import { useFeedback } from '../components/feedback.tsx';
 import { IconBack, IconSearch, IconTrash } from '../components/Icons.tsx';
 import { api } from '../lib/api.ts';
@@ -29,6 +30,7 @@ export function BinderEditPage({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [pockets, setPockets] = useState<Pockets>(9);
+  const [colour, setColour] = useState<BinderColour>('red');
   const [lines, setLines] = useState<Line[]>([]);
   const [allCopies, setAllCopies] = useState(1);
   const [query, setQuery] = useState('');
@@ -41,6 +43,7 @@ export function BinderEditPage({ id }: { id: string }) {
         setBinder(b);
         setName(b.name);
         setPockets(b.pockets as Pockets);
+        setColour(colourOf(b));
         setLines(b.cards.map((c) => ({ ...c, key: nextKey.current++ })));
         setAllCopies(b.cards[0]?.copies ?? 1);
       },
@@ -64,7 +67,7 @@ export function BinderEditPage({ id }: { id: string }) {
   async function save() {
     setSaving(true);
     try {
-      await api.updateBinder(id, { name: name.trim(), pockets, cards: lines.map(({ key: _, ...c }) => c) });
+      await api.updateBinder(id, { name: name.trim(), pockets, colour, cards: lines.map(({ key: _, ...c }) => c) });
       toast('Binder saved');
       navigate(`/binder/${encodeURIComponent(id)}`, true);
     } catch (err) {
@@ -115,6 +118,10 @@ export function BinderEditPage({ id }: { id: string }) {
           Name
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
         </label>
+        <fieldset>
+          <legend>Colour</legend>
+          <ColourPicker value={colour} onChange={setColour} />
+        </fieldset>
         <fieldset>
           <legend>Pockets per page</legend>
           <div className="segmented">

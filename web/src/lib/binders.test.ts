@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { binderCards, missingOf, ownedPrintings, pagesOf, pocketsOf, pokemonCardsOf, printingsOf, setCardsOf } from './binders.ts';
+import { binderCards, binderStats, missingOf, percentFilled, ownedPrintings, pagesOf, pocketsOf, pokemonCardsOf, printingsOf, setCardsOf } from './binders.ts';
 import { buildCatalog, type CatalogJson } from './catalog.ts';
 
 // Runs against the real generated catalog (npm run catalog).
@@ -85,4 +85,25 @@ test('a card in a binder twice: copies fill the first place, then the next', () 
     pockets.map((p) => p.filled),
     [true, true, true, false],
   );
+});
+
+test('binder stats: pockets filled, pages, and the value of what is in it and what is missing', () => {
+  const cards = [
+    { cardId: 'a', variant: 'normal', copies: 9 },
+    { cardId: 'b', variant: 'holo', copies: 2 },
+  ];
+  const pockets = pocketsOf(cards, ownedPrintings([{ cardId: 'a', variant: 'normal', quantity: 4 }, { cardId: 'b', variant: 'holo', quantity: 1 }]));
+  const prices: Record<string, number> = { a: 0.5, b: 10 };
+  assert.deepEqual(binderStats(pockets, 9, (id) => prices[id] ?? null), { pockets: 11, filled: 5, pages: 2, value: 12, toComplete: 12.5 });
+  assert.deepEqual(binderStats(pockets, 9, null), { pockets: 11, filled: 5, pages: 2, value: null, toComplete: null });
+  assert.deepEqual(binderStats([], 9, null), { pockets: 0, filled: 0, pages: 0, value: null, toComplete: null });
+});
+
+test('percent filled never says 0% once something is in, nor 100% until full', () => {
+  assert.equal(percentFilled({ filled: 0, pockets: 266 }), '0%');
+  assert.equal(percentFilled({ filled: 2, pockets: 266 }), '<1%');
+  assert.equal(percentFilled({ filled: 133, pockets: 266 }), '50%');
+  assert.equal(percentFilled({ filled: 265, pockets: 266 }), '99%');
+  assert.equal(percentFilled({ filled: 266, pockets: 266 }), '100%');
+  assert.equal(percentFilled({ filled: 0, pockets: 0 }), '0%');
 });

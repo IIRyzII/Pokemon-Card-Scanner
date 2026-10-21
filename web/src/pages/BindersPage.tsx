@@ -1,20 +1,33 @@
-// Your real binders, each with how full it is, and making a new one from a set or a Pokémon.
+// Your real binders, on a shelf (or as a list) with how full each is and what it's worth, and
+// making a new one from a set or a Pokémon.
 
 import { useEffect, useMemo, useState } from 'react';
-import { MAX_COPIES, POCKET_LAYOUTS, POCKET_SIZES, type Pockets } from '../../../shared/binders.ts';
+import {
+  BINDER_COLOURS,
+  MAX_COPIES,
+  POCKET_LAYOUTS,
+  POCKET_SIZES,
+  colourOf,
+  nextColour,
+  type BinderColour,
+  type Pockets,
+} from '../../../shared/binders.ts';
 import type { Binder } from '../../../shared/types.ts';
 import { hasRole } from '../../../shared/types.ts';
 import { IconPlus } from '../components/Icons.tsx';
 import { ProgressBar } from '../components/ProgressBar.tsx';
-import { SetsTabs } from '../components/SetsTabs.tsx';
+import { BinderShelf, type ShelfItem } from '../components/BinderShelf.tsx';
+import { ColourPicker } from '../components/ColourPicker.tsx';
 import { Sheet } from '../components/Sheet.tsx';
 import { api } from '../lib/api.ts';
-import { binderCards, ownedPrintings, pocketsOf, pokemonCardsOf, setCardsOf } from '../lib/binders.ts';
+import { binderCards, binderStats, ownedPrintings, percentFilled, pocketsOf, pokemonCardsOf, setCardsOf } from '../lib/binders.ts';
 import type { Catalog, CatalogCard } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
+import { useCurrency } from '../lib/currency.tsx';
 import { href, navigate } from '../lib/router.ts';
+import { priceLookup } from '../lib/sets.ts';
 import { useSession } from '../lib/session.tsx';
-import { useCatalog } from '../lib/useCatalog.ts';
+import { useCatalog, useMarketPrices } from '../lib/useCatalog.ts';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
@@ -24,14 +37,29 @@ export function layoutText(pockets: number, total: number): string {
   return `${pockets}-pocket pages · ${plural(pages, 'page')} (${plural(Math.ceil(pages / 2), 'sheet')})`;
 }
 
+const VIEW_KEY = 'pokevault.binderView';
+
+function readView(): 'shelf' | 'list' {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'shelf';
+  } catch {
+    return 'shelf';
+  }
+}
+
 export function BindersPage() {
   const { user } = useSession();
   const { data } = useCollection();
+  const { catalog } = useCatalog();
+  const prices = useMarketPrices();
+  const { convert, format, currency } = useCurrency();
   const [binders, setBinders] = useState<Binder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [view, setViewState] = useState(readView);
   const canEdit = hasRole(user?.role, 'editor');
   const owned = useMemo(() => ownedPrintings(data?.items ?? []), [data]);
+  const money = (v: number) => format(v, currency, { round: true });
 
   useEffect(() => {
     api.binders().then(
@@ -40,20 +68,44 @@ export function BindersPage() {
     );
   }, []);
 
+  // One copy's market price, by card id.
+  const priceOf = useMemo(() => {
+    if (!prices || !catalog) return null;
+    const lookup = priceLookup(prices, convert);
+    return (cardId: string) => {
+      const card = catalog.byId.get(cardId);
+      return card ? lookup(card) : null;
+    };
+  }, [prices, catalog, convert]);
+
+  const items: ShelfItem[] = useMemo(
+    () => (binders ?? []).map((binder) => ({ binder, stats: binderStats(pocketsOf(binder.cards, owned), binder.pockets, priceOf) })),
+    [binders, owned, priceOf],
+  );
+
+  function setView(v: 'shelf' | 'list') {
+    setViewState(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <div className="page">
-      <SetsTabs on="binders" />
-      <div className="list-head">
-        <p className="muted small">
-          Your real binders, page by page: the cards you have are in colour, the ones still to find are greyed out, so you know what goes
-          in every pocket.
-        </p>
+      <div className="binder-head">
+        <h1>Binders</h1>
         {canEdit && (
           <button className="btn primary small" onClick={() => setCreating(true)}>
             <IconPlus width={18} height={18} /> New binder
           </button>
         )}
       </div>
+      <p className="muted small">
+        Your real binders, page by page: the cards you have are in colour, the ones still to find are greyed out, so you know what goes in
+        every pocket.
+      </p>
       {error && <p className="error">{error}</p>}
       {!binders && !error && <div className="spinner" aria-label="Loading binders" />}
       {binders?.length === 0 && (
@@ -65,30 +117,47 @@ export function BindersPage() {
           </p>
         </div>
       )}
-      <ul className="set-list">
-        {binders?.map((b) => {
-          const pockets = pocketsOf(b.cards, owned);
-          const filled = pockets.filter((p) => p.filled).length;
-          return (
-            <li key={b.id}>
-              <a className="binder-row" href={href('binder', b.id)}>
-                <span className="set-info">
-                  <span className="set-name">{b.name}</span>
-                  <span className="faint small">{layoutText(b.pockets, pockets.length)}</span>
-                  <ProgressBar value={filled} max={pockets.length} label={`${b.name}: ${filled} of ${pockets.length} pockets filled`} />
-                </span>
-                <span className="binder-count">
-                  <b>
-                    {filled}/{pockets.length}
-                  </b>
-                  <span className="faint small">{pockets.length ? Math.floor((100 * filled) / pockets.length) : 0}%</span>
-                </span>
-              </a>
-            </li>
-          );
-        })}
-      </ul>
-      {creating && <NewBinder onClose={() => setCreating(false)} />}
+      {items.length > 0 && (
+        <>
+          <div className="toolbar">
+            <div className="segmented small" role="group" aria-label="Show binders as">
+              <button className={view === 'shelf' ? 'on' : ''} aria-pressed={view === 'shelf'} onClick={() => setView('shelf')}>
+                Shelf
+              </button>
+              <button className={view === 'list' ? 'on' : ''} aria-pressed={view === 'list'} onClick={() => setView('list')}>
+                List
+              </button>
+            </div>
+            {view === 'shelf' && <span className="faint small">Hover over a binder, or tap it, to see how full it is. Tap again to open it.</span>}
+          </div>
+          {view === 'shelf' ? (
+            <BinderShelf items={items} money={money} />
+          ) : (
+            <ul className="set-list">
+              {items.map(({ binder: b, stats: s }) => (
+                <li key={b.id}>
+                  <a className="binder-row" href={href('binder', b.id)}>
+                    <span className="swatch tall" style={{ background: BINDER_COLOURS[colourOf(b)].hex }} aria-hidden="true" />
+                    <span className="set-info">
+                      <span className="set-name">{b.name}</span>
+                      <span className="faint small">{layoutText(b.pockets, s.pockets)}</span>
+                      <ProgressBar value={s.filled} max={s.pockets} label={`${b.name}: ${s.filled} of ${s.pockets} pockets filled`} />
+                    </span>
+                    <span className="binder-count">
+                      <b>
+                        {s.filled}/{s.pockets}
+                      </b>
+                      <span className="faint small">{percentFilled(s)}</span>
+                      {s.value !== null && <span className="faint small">{money(s.value)}</span>}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+      {creating && <NewBinder shelf={binders ?? []} onClose={() => setCreating(false)} />}
     </div>
   );
 }
@@ -108,8 +177,9 @@ function setGroups(catalog: Catalog) {
   return [...groups];
 }
 
-function NewBinder({ onClose }: { onClose: () => void }) {
+function NewBinder({ shelf, onClose }: { shelf: Binder[]; onClose: () => void }) {
   const { catalog } = useCatalog();
+  const [colour, setColour] = useState<BinderColour>(() => nextColour(shelf));
   const [kind, setKind] = useState<Kind>('set');
   const [setId, setSetId] = useState('');
   const [pokemon, setPokemon] = useState('');
@@ -139,7 +209,7 @@ function NewBinder({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const { binder } = await api.createBinder({ name: shownName.trim(), pockets, cards });
+      const { binder } = await api.createBinder({ name: shownName.trim(), pockets, cards, colour });
       onClose();
       navigate(`/binder/${encodeURIComponent(binder.id)}`);
     } catch (err) {
@@ -260,6 +330,10 @@ function NewBinder({ onClose }: { onClose: () => void }) {
           Name
           <input value={shownName} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="e.g. Shuckle binder" />
         </label>
+        <fieldset>
+          <legend>Colour</legend>
+          <ColourPicker value={colour} onChange={setColour} />
+        </fieldset>
 
         {kind !== 'empty' && (
           <p className="note">

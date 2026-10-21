@@ -1,8 +1,8 @@
 // One binder as it is on the shelf, page by page: the cards you have in colour, the rest greyed
 // out, each pocket noting its printing. Or the list of what's still missing and where it goes.
 
-import { useEffect, useMemo, useState } from 'react';
-import { POCKET_LAYOUTS, type Pockets } from '../../../shared/binders.ts';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { BINDER_COLOURS, POCKET_LAYOUTS, colourOf, type Pockets } from '../../../shared/binders.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import type { Binder } from '../../../shared/types.ts';
 import { hasRole } from '../../../shared/types.ts';
@@ -10,7 +10,7 @@ import { CardImage } from '../components/CardImage.tsx';
 import { IconBack, IconEdit } from '../components/Icons.tsx';
 import { ProgressBar } from '../components/ProgressBar.tsx';
 import { api } from '../lib/api.ts';
-import { missingOf, ownedPrintings, pagesOf, pocketsOf, printingNote, type Pocket } from '../lib/binders.ts';
+import { binderStats, missingOf, ownedPrintings, pagesOf, percentFilled, pocketsOf, printingNote, type Pocket } from '../lib/binders.ts';
 import type { Catalog, CatalogCard } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
@@ -57,26 +57,26 @@ export function BinderPage({ id }: { id: string }) {
   const perPage = binder.pockets;
   const columns = POCKET_LAYOUTS[perPage as Pockets] ?? 3;
   const pages = pagesOf(pockets, perPage);
-  const filled = pockets.filter((p) => p.filled).length;
   const missing = missingOf(binder.cards, pockets, perPage);
   const priceOf = priceLookup(prices, convert);
-  const toComplete =
-    prices && catalog
-      ? missing.reduce((sum, m) => {
-          const card = catalog.byId.get(m.cardId);
-          return sum + ((card && priceOf(card)) ?? 0) * m.need;
-        }, 0)
-      : null;
   const card = (cardId: string) => catalog?.byId.get(cardId);
+  const priceOfId = (cardId: string) => {
+    const c = card(cardId);
+    return c ? priceOf(c) : null;
+  };
+  const { filled, value, toComplete } = binderStats(pockets, perPage, prices && catalog ? priceOfId : null);
+  const money = (v: number) => format(v, currency, { round: true });
 
   return (
-    <div className="page">
+    <div className="page" style={{ '--binder': BINDER_COLOURS[colourOf(binder)].hex } as CSSProperties}>
       <button className="back" onClick={() => goBack('/binders')}>
         <IconBack /> Binders
       </button>
       <header className="binder-head">
         <div>
-          <h1>{binder.name}</h1>
+          <h1>
+            <span className="swatch tall" aria-hidden="true" /> {binder.name}
+          </h1>
           <p className="muted small">{layoutText(perPage, pockets.length)}</p>
         </div>
         {canEdit && (
@@ -92,14 +92,28 @@ export function BinderPage({ id }: { id: string }) {
             <span>
               <b>{filled}</b> of {pockets.length} pockets filled
             </span>
-            <b>{Math.floor((100 * filled) / pockets.length)}%</b>
+            <b>{percentFilled({ filled, pockets: pockets.length })}</b>
           </div>
           <ProgressBar value={filled} max={pockets.length} label={`${binder.name}: pockets filled`} />
           <p className="faint small">
-            {filled === pockets.length
-              ? 'Every pocket is filled! 🎉'
-              : `${missing.reduce((n, m) => n + m.need, 0)} cards to go${toComplete ? `, about ${format(toComplete, currency, { round: true })} at market prices` : ''}.`}
+            {filled === pockets.length ? 'Every pocket is filled! 🎉' : `${missing.reduce((n, m) => n + m.need, 0)} cards to go.`}
           </p>
+          {value !== null && (
+            <dl className="set-values">
+              <div>
+                <dt>In it now</dt>
+                <dd>{money(value)}</dd>
+              </div>
+              <div>
+                <dt>To complete</dt>
+                <dd>{money(toComplete ?? 0)}</dd>
+              </div>
+              <div>
+                <dt>When full</dt>
+                <dd>{money(value + (toComplete ?? 0))}</dd>
+              </div>
+            </dl>
+          )}
         </section>
       )}
 

@@ -9,7 +9,8 @@ A phone-friendly web app for tracking a Pokémon card collection:
   - **Dupes** (next to All / Raw / Graded) shows only the cards you have more than one of, with how many spare copies that is and what they're worth (keeping your most valuable copy of each): your trade pile.
   - Sort by **Copies: most → least** to see the cards you have most of first, each with its total copies and value.
   - If older duplicate entries are still separate (added before copies were counted together, or edited to match), the collection page offers to **Combine** them, and so does **Account → Duplicate entries**. The number of cards stays the same.
-- **Binders**: your real binders, page by page, under **Sets → Binders**.
+- **Binders**: your real binders, page by page, in the **Binders** tab.
+  - They stand on a **bookshelf**, each spine in its colour (12 to choose from), thicker the more pages it has. Hover over one, or tap it, to see its name, how full it is, what's in it worth and what completing it would cost; tap it again (or **Open binder**) to open it. Prefer a plain list? Switch to **List**.
   - Make one from **a set** (every Paradox Rift card in number order, or the master set with every printing side by side), from **a Pokémon** (every Shuckle, 9 copies of each), or start empty. Pages hold 4, 9 or 12 pockets.
   - Each pocket shows its card in colour when the collection has a copy in that printing, greyed out when it doesn't, with a footnote saying which printing goes there (Regular, Holo, Reverse Holo…). Each copy fills one pocket, so 4 Shuckles fill 4 of the 9 kept for that card.
   - **Missing** lists what's still needed, with the page and pocket it goes in and roughly what completing the binder would cost.

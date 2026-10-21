@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { IconSearch } from '../components/Icons.tsx';
 import { ProgressBar } from '../components/ProgressBar.tsx';
-import { SetsTabs } from '../components/SetsTabs.tsx';
 import { normName } from '../lib/catalog.ts';
 import { ownedCount, useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
@@ -67,7 +66,7 @@ export function SetsPage() {
 
   return (
     <div className="page">
-      <SetsTabs on="sets" />
+      <h1>Sets</h1>
       {catalog && (
         <p className="muted small">
           {started.length

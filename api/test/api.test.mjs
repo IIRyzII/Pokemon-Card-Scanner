@@ -208,12 +208,16 @@ try {
     assert.deepEqual([renamed.data.binder.name, renamed.data.binder.pockets, renamed.data.binder.cards], ['Shuckle binder', 12, shuckles]);
     const one = await api('PATCH', `/api/binders/${id}`, { token: B, body: { cards: [shuckles[0]] }, expect: 200 });
     assert.equal(one.data.binder.cards.length, 1);
+    assert.equal(one.data.binder.colour, null, 'no colour chosen: the app picks one');
+    const teal = await api('PATCH', `/api/binders/${id}`, { token: B, body: { colour: 'teal' }, expect: 200 });
+    assert.deepEqual([teal.data.binder.colour, teal.data.binder.name], ['teal', 'Shuckle binder']);
     for (const body of [
       { pockets: 7 },
       { cards: [{ cardId: 'neo1-72', variant: 'sparkly', copies: 1 }] },
       { cards: [{ cardId: 'neo1-72', variant: 'normal', copies: 0 }] },
       { cards: [{ cardId: 'neo1-72', variant: 'normal', copies: 100 }] },
       { name: '' },
+      { colour: 'plaid' },
     ]) {
       await api('PATCH', `/api/binders/${id}`, { token: B, body, expect: 400 });
     }

@@ -82,6 +82,51 @@ export function missingOf(cards: BinderCard[], pockets: Pocket[], perPage: numbe
   return [...missing.values()];
 }
 
+export interface BinderStats {
+  pockets: number;
+  filled: number;
+  pages: number;
+  /** Market value of the cards in it (null without prices) */
+  value: number | null;
+  /** …and of the ones still missing: what completing it would cost */
+  toComplete: number | null;
+}
+
+/** How full a binder is and what it's worth; `priceOf` is one copy's market price (null: unknown). */
+export function binderStats(
+  pockets: Pocket[],
+  perPage: number,
+  priceOf: ((cardId: string) => number | null) | null,
+): BinderStats {
+  let filled = 0;
+  let value = 0;
+  let toComplete = 0;
+  for (const p of pockets) {
+    const price = priceOf?.(p.cardId) ?? 0;
+    if (p.filled) {
+      filled++;
+      value += price;
+    } else {
+      toComplete += price;
+    }
+  }
+  return {
+    pockets: pockets.length,
+    filled,
+    pages: Math.ceil(pockets.length / perPage),
+    value: priceOf ? value : null,
+    toComplete: priceOf ? toComplete : null,
+  };
+}
+
+/** "53%"; never 0% once something is in it, nor 100% until it's full. */
+export function percentFilled({ filled, pockets }: Pick<BinderStats, 'filled' | 'pockets'>): string {
+  if (!pockets) return '0%';
+  const pct = Math.floor((100 * filled) / pockets);
+  if (filled > 0 && pct === 0) return '<1%';
+  return `${filled < pockets ? Math.min(pct, 99) : 100}%`;
+}
+
 /** The printings a binder starts with for a card: its first (as adding a card does) or all of them. */
 export function printingsOf(card: Pick<CatalogCard, 'variants'>, every: boolean): string[] {
   const all = card.variants?.length ? card.variants : ['normal'];

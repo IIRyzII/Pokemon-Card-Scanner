@@ -139,11 +139,13 @@ export interface Binder {
   pockets: number;
   /** In pocket order */
   cards: BinderCard[];
+  /** Its colour on the shelf (a BINDER_COLOURS key), null to pick one from its id */
+  colour: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-export type BinderInput = Pick<Binder, 'name' | 'pockets' | 'cards'>;
+export type BinderInput = Pick<Binder, 'name' | 'pockets' | 'cards' | 'colour'>;
 
 /** POST /api/collection/merge-duplicates: `removed` entries were combined into `groups` entries. */
 export interface MergeResponse {
