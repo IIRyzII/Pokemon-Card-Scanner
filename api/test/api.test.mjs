@@ -103,6 +103,7 @@ try {
     const list = await api('GET', '/api/collection', { token: B, expect: 200 });
     assert.equal(list.data.items.length, 0);
     await api('POST', '/api/collection', { token: B, body: { cardId: 'base1-4', variant: 'holo' }, expect: 403 });
+    await api('POST', '/api/collection/merge-duplicates', { token: B, expect: 403 });
     await api('GET', '/api/users', { token: B, expect: 403 });
   });
 
@@ -165,6 +166,28 @@ try {
       await api('DELETE', `/api/collection/${id}`, { token: B, expect: 200 });
       await api('DELETE', `/api/collection/${id}/purge`, { token: A, expect: 200 });
     }
+  });
+
+  await check('duplicate entries already in the collection are combined into the oldest', async () => {
+    // An entry edited to match another: the kind of duplicate made before adding counted copies together.
+    const lp = await api('POST', '/api/collection', {
+      token: B,
+      body: { cardId: 'sv03.5-025', variant: 'reverse', grader: 'RAW', condition: 'LP', quantity: 2 },
+      expect: 201,
+    });
+    await api('PATCH', `/api/collection/${lp.data.item.id}`, { token: B, body: { condition: 'NM' }, expect: 200 });
+    await api('POST', '/api/collection/merge-duplicates', { token: A, expect: 200 }).then(({ data }) =>
+      assert.deepEqual(data, { groups: 1, removed: 1 }),
+    );
+    const list = await api('GET', '/api/collection', { token: B, expect: 200 });
+    const pikas = list.data.items.filter((i) => i.cardId === 'sv03.5-025');
+    assert.deepEqual(
+      pikas.map((i) => [i.id, i.quantity]),
+      [[pikachuId, 5]],
+      'the 3 already there and the 2 edited to match',
+    );
+    const again = await api('POST', '/api/collection/merge-duplicates', { token: A, expect: 200 });
+    assert.deepEqual(again.data, { groups: 0, removed: 0 });
   });
 
   await check('validation: wrong printing, bad grade, unknown card', async () => {
@@ -260,7 +283,7 @@ try {
   await check('admin audit log and export', async () => {
     const { data } = await api('GET', '/api/admin/audit', { token: A, expect: 200 });
     const actions = data.entries.map((e) => e.action);
-    for (const a of ['register', 'add', 'log-sale', 'remove', 'restore', 'purge', 'update']) assert.ok(actions.includes(a), a);
+    for (const a of ['register', 'add', 'merge', 'log-sale', 'remove', 'restore', 'purge', 'update']) assert.ok(actions.includes(a), a);
     const exp = await api('GET', '/api/admin/export', { token: A, expect: 200 });
     assert.equal(exp.data.collection.length, 1);
     assert.ok(!JSON.stringify(exp.data).includes('pw_hash'));

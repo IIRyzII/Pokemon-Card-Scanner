@@ -1,10 +1,16 @@
 // The shared collection: viewers read, editors change, admins purge the trash.
 
 import { Hono } from 'hono';
-import { entryFor } from '../../../shared/copies.ts';
+import { entryFor, planMerges } from '../../../shared/copies.ts';
 import { CURRENCIES, convert } from '../../../shared/currency.ts';
 import { CONDITIONS, GRADERS, GRADE_LABELS, VARIANTS, isGrade } from '../../../shared/grading.ts';
-import { hasRole, type CollectionResponse, type ItemFields, type PriceRefreshResponse } from '../../../shared/types.ts';
+import {
+  hasRole,
+  type CollectionResponse,
+  type ItemFields,
+  type MergeResponse,
+  type PriceRefreshResponse,
+} from '../../../shared/types.ts';
 import { authenticate, requireRole } from '../auth.ts';
 import { ITEM_SELECT, auditStmt, getItem, toItem } from '../db.ts';
 import { HttpError, nowIso, type AppEnv, type Env } from '../env.ts';
@@ -97,6 +103,40 @@ collection.get('/', async (c) => {
 collection.post('/refresh-prices', async (c) =>
   c.json<PriceRefreshResponse>(await refreshStalePrices(c.env, ON_OPEN_TTL_MS)),
 );
+
+/**
+ * Combines entries that are copies of the same card with the same details into one entry each
+ * (the oldest), as adding them now would. Nothing is lost: the combined entry holds every copy.
+ */
+collection.post('/merge-duplicates', requireRole('editor'), async (c) => {
+  const { results } = await c.env.DB.prepare(`${ITEM_SELECT} WHERE ci.deleted_at IS NULL`).all();
+  const plans = planMerges(results.map(toItem));
+  if (plans.length) {
+    const user = c.get('user');
+    const now = nowIso();
+    await c.env.DB.batch(
+      plans.flatMap(({ keep, absorb, quantity }) => [
+        c.env.DB.prepare('UPDATE collection_items SET quantity = ?, updated_at = ? WHERE id = ?').bind(quantity, now, keep.id),
+        // (50 at a time: D1 takes up to 100 values per statement)
+        ...Array.from({ length: Math.ceil(absorb.length / 50) }, (_, i) => absorb.slice(i * 50, i * 50 + 50)).map((ids) =>
+          c.env.DB.prepare(`DELETE FROM collection_items WHERE id IN (${ids.map(() => '?').join(', ')})`).bind(
+            ...ids.map((a) => a.id),
+          ),
+        ),
+        auditStmt(c.env, user, 'merge', 'item', keep.id, {
+          card: `${keep.name} · ${keep.setName} #${keep.number}`,
+          entries: absorb.length + 1,
+          quantity,
+          combined: absorb.map((a) => a.id),
+        }),
+      ]),
+    );
+  }
+  return c.json<MergeResponse>({
+    groups: plans.length,
+    removed: plans.reduce((n, p) => n + p.absorb.length, 0),
+  });
+});
 
 collection.get('/:id', async (c) => c.json({ item: await loadItem(c.env, c.req.param('id')) }));
 

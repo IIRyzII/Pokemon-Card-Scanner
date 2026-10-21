@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { entryFor, sameCopy } from './copies.ts';
+import { entryFor, planMerges, sameCopy } from './copies.ts';
 import type { ItemFields } from './types.ts';
 
 const raw = (patch: Partial<ItemFields> = {}): ItemFields => ({
@@ -56,4 +56,36 @@ test('new copies count with the oldest matching entry that has room', () => {
   assert.equal(entryFor(entries, raw({ quantity: 997 }))?.id, 'first');
   assert.equal(entryFor(entries, raw({ quantity: 998 }))?.id, 'second');
   assert.equal(entryFor(entries, raw({ condition: 'MP' })), undefined);
+});
+
+test('duplicate entries are combined into the oldest of each card; different details stay apart', () => {
+  const e = (id: string, cardId: string, createdAt: string, patch: Partial<ItemFields> = {}) => ({ id, cardId, createdAt, ...raw(patch) });
+  const plans = planMerges([
+    e('pika-2', 'sv03.5-025', '2026-10-02', { quantity: 2 }),
+    e('pika-1', 'sv03.5-025', '2026-10-01'),
+    e('pika-lp', 'sv03.5-025', '2026-10-03', { condition: 'LP' }),
+    e('pika-3', 'sv03.5-025', '2026-10-04'),
+    e('furret-1', 'swsh3-136', '2026-10-01', { variant: 'normal' }),
+    e('furret-2', 'swsh3-136', '2026-10-05', { variant: 'normal', quantity: 3 }),
+    e('zard', 'base1-4', '2026-10-01', { variant: 'holo' }),
+    e('slab-a', 'base1-4', '2026-10-02', { variant: 'holo', grader: 'PSA', grade: 9, condition: null, certNumber: '1' }),
+    e('slab-b', 'base1-4', '2026-10-03', { variant: 'holo', grader: 'PSA', grade: 9, condition: null, certNumber: '2' }),
+  ]);
+  assert.deepEqual(
+    plans.map((p) => [p.keep.id, p.absorb.map((a) => a.id), p.quantity]),
+    [
+      ['pika-1', ['pika-2', 'pika-3'], 4],
+      ['furret-1', ['furret-2'], 4],
+    ],
+  );
+});
+
+test('combining never makes an entry hold more than 999 copies', () => {
+  const e = (id: string, quantity: number, createdAt: string) => ({ id, cardId: 'a', createdAt, ...raw({ quantity }) });
+  const plans = planMerges([e('a', 600, '1'), e('b', 500, '2'), e('c', 300, '3')]);
+  assert.deepEqual(
+    plans.map((p) => [p.keep.id, p.absorb.map((a) => a.id), p.quantity]),
+    [['a', ['c'], 900]],
+  );
+  assert.deepEqual(planMerges([e('a', 1, '1')]), []);
 });

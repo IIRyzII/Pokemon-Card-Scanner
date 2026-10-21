@@ -125,6 +125,12 @@ export interface CollectionResponse {
   };
 }
 
+/** POST /api/collection/merge-duplicates: `removed` entries were combined into `groups` entries. */
+export interface MergeResponse {
+  groups: number;
+  removed: number;
+}
+
 /** Prices fetched again by POST /api/collection/refresh-prices, one batch per call. */
 export interface PriceRefreshResponse {
   refreshed: number;

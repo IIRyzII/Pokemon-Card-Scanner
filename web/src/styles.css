@@ -794,9 +794,30 @@ button.tile.as-button {
 
 .group-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 10px;
+  gap: 4px 10px;
   margin-top: 1.4em;
+}
+.group-count {
+  margin-left: auto;
+  color: var(--faint);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.merge-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.merge-note span {
+  flex: 1 1 220px;
+}
+.dupes-summary {
+  margin: -4px 0 12px;
 }
 
 .empty {

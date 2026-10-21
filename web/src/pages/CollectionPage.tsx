@@ -1,11 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { planMerges } from '../../../shared/copies.ts';
+import { cardNumberText } from '../../../shared/links.ts';
 import type { CollectionItem } from '../../../shared/types.ts';
 import { hasRole } from '../../../shared/types.ts';
 import { ItemTile } from '../components/CardTile.tsx';
+import { useFeedback } from '../components/feedback.tsx';
 import { IconPlus, IconRefresh, IconSearch } from '../components/Icons.tsx';
+import { api } from '../lib/api.ts';
 import { canonicalArtist, normName, type Catalog } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
+import { copiesByCard, spares } from '../lib/dupes.ts';
 import { relativeTime } from '../lib/format.ts';
 import { href } from '../lib/router.ts';
 import { useSession } from '../lib/session.tsx';
@@ -15,10 +20,16 @@ const SORTS = {
   recent: 'Recently added',
   value: 'Value: high → low',
   valueAsc: 'Value: low → high',
+  copies: 'Copies: most → least',
   name: 'Name A–Z',
   set: 'Set & number',
   artist: 'Artist A–Z',
 } as const;
+
+const FILTERS = { all: 'All', raw: 'Raw', graded: 'Graded', dupes: 'Dupes' } as const;
+type Filter = keyof typeof FILTERS;
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 type SortKey = keyof typeof SORTS;
 const SORT_KEY = 'pokevault.sort';
 
@@ -42,16 +53,24 @@ function sortItems(
   sort: SortKey,
   catalog: Catalog | null,
   convert: (amount: number | null, from: string) => number | null,
+  copies: Map<string, number>,
 ): CollectionItem[] {
   const total = (i: CollectionItem) => (convert(i.value, i.valueCurrency ?? 'USD') ?? -1) * i.quantity;
   const setDate = (i: CollectionItem) => catalog?.sets.find((s) => s.id === i.setId)?.date ?? '';
   const artist = (i: CollectionItem) => canonicalArtist(catalog, i.artist) ?? '￿';
+  const held = (i: CollectionItem) => copies.get(i.cardId) ?? 0;
   const list = [...items];
   switch (sort) {
     case 'value':
       return list.sort((a, b) => total(b) - total(a));
     case 'valueAsc':
       return list.sort((a, b) => total(a) - total(b));
+    case 'copies':
+      // Each card's entries together, its biggest first.
+      return list.sort(
+        (a, b) =>
+          held(b) - held(a) || a.name.localeCompare(b.name) || a.cardId.localeCompare(b.cardId) || b.quantity - a.quantity,
+      );
     case 'name':
       return list.sort((a, b) => a.name.localeCompare(b.name) || setDate(a).localeCompare(setDate(b)));
     case 'set':
@@ -70,10 +89,36 @@ export function CollectionPage() {
   const { user } = useSession();
   const { catalog } = useCatalog();
   const { format, convert, currency } = useCurrency();
+  const { toast, confirm } = useFeedback();
   const [query, setQuery] = useState('');
   const [sort, setSortState] = useState<SortKey>(readSort);
-  const [filter, setFilter] = useState<'all' | 'raw' | 'graded'>('all');
+  const [filter, setFilter] = useState<Filter>('all');
+  const [merging, setMerging] = useState(false);
   const canEdit = hasRole(user?.role, 'editor');
+  const copies = useMemo(() => copiesByCard(data?.items ?? []), [data]);
+  // Entries of the same copy that could be one (made before adding counted copies together).
+  const merges = useMemo(() => planMerges(data?.items ?? []), [data]);
+  const mergeEntries = merges.reduce((n, m) => n + m.absorb.length + 1, 0);
+  const unitValue = useCallback((i: CollectionItem) => convert(i.value, i.valueCurrency ?? 'USD'), [convert]);
+
+  async function combine() {
+    const ok = await confirm({
+      title: 'Combine duplicate entries?',
+      body: `${mergeEntries} entries are copies of the same card with the same details. Each card's copies go into one entry, so they become ${merges.length}. The number of cards and their details stay the same.`,
+      confirmText: `Combine into ${merges.length}`,
+    });
+    if (!ok) return;
+    setMerging(true);
+    try {
+      const { groups, removed } = await api.mergeDuplicates();
+      await reload();
+      toast(`Combined ${groups + removed} entries into ${groups}`);
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    } finally {
+      setMerging(false);
+    }
+  }
 
   const setSort = (s: SortKey) => {
     setSortState(s);
@@ -89,28 +134,56 @@ export function CollectionPage() {
     const filtered = (data?.items ?? []).filter((i) => {
       if (filter === 'raw' && i.grader !== 'RAW') return false;
       if (filter === 'graded' && i.grader === 'RAW') return false;
+      if (filter === 'dupes' && (copies.get(i.cardId) ?? 0) < 2) return false;
       if (!q) return true;
       const hay = normName(
         `${i.name} ${i.setName} ${i.number} ${canonicalArtist(catalog, i.artist) ?? ''} ${i.grader === 'RAW' ? '' : `${i.grader} ${i.grade}`} ${i.notes ?? ''}`,
       );
       return q.split(' ').every((w) => hay.includes(w));
     });
-    return sortItems(filtered, sort, catalog, convert);
-  }, [data, query, filter, sort, catalog, convert]);
+    return sortItems(filtered, sort, catalog, convert, copies);
+  }, [data, query, filter, sort, catalog, convert, copies]);
 
-  // When sorted by artist, show a header per artist.
+  // Sorted by artist: a header per artist. By copies: a header per card held more than once.
   const groups = useMemo(() => {
-    if (sort !== 'artist') return null;
-    const out: { artist: string; items: CollectionItem[]; value: number }[] = [];
+    if (sort !== 'artist' && sort !== 'copies') return null;
+    const out: { key: string; head: ReactNode; count: string; items: CollectionItem[]; value: number }[] = [];
     for (const item of items) {
-      const a = canonicalArtist(catalog, item.artist) ?? 'Unknown artist';
+      let key: string;
+      let head: ReactNode;
+      if (sort === 'artist') {
+        key = canonicalArtist(catalog, item.artist) ?? 'Unknown artist';
+        head = <a href={href('artist', key)}>🖌 {key}</a>;
+      } else if ((copies.get(item.cardId) ?? 0) > 1) {
+        key = item.cardId;
+        head = (
+          <>
+            <a href={href('card', item.cardId)}>{item.name}</a>
+            <span className="faint small">
+              {item.setName} · #{cardNumberText(item.number, item.setTotal)}
+            </span>
+          </>
+        );
+      } else {
+        key = 'singles';
+        head = 'One copy';
+      }
       let g = out[out.length - 1];
-      if (!g || g.artist !== a) out.push((g = { artist: a, items: [], value: 0 }));
+      if (!g || g.key !== key) {
+        g = { key, head, count: '', items: [], value: 0 };
+        out.push(g);
+      }
       g.items.push(item);
-      g.value += (convert(item.value, item.valueCurrency ?? 'USD') ?? 0) * item.quantity;
+      g.value += (unitValue(item) ?? 0) * item.quantity;
+    }
+    for (const g of out) {
+      const n = g.items.reduce((sum, i) => sum + i.quantity, 0);
+      g.count = sort === 'artist' ? String(g.items.length) : g.key === 'singles' ? plural(n, 'card') : `×${n}`;
     }
     return out;
-  }, [items, sort, catalog, convert]);
+  }, [items, sort, catalog, unitValue, copies]);
+
+  const dupes = useMemo(() => (filter === 'dupes' ? spares(items, unitValue) : null), [filter, items, unitValue]);
 
   const s = data?.summary;
 
@@ -145,6 +218,17 @@ export function CollectionPage() {
         {s && s.unpriced > 0 && <div className="faint small">{s.unpriced} without a price yet</div>}
       </section>
 
+      {canEdit && merges.length > 0 && (
+        <div className="note merge-note">
+          <span>
+            {mergeEntries} entries are copies of the same card with the same details, from before copies were counted together.
+          </span>
+          <button className="btn small primary" onClick={combine} disabled={merging}>
+            {merging ? 'Combining…' : `Combine into ${merges.length}`}
+          </button>
+        </div>
+      )}
+
       <div className="toolbar">
         <div className="search">
           <IconSearch />
@@ -163,14 +247,22 @@ export function CollectionPage() {
             </option>
           ))}
         </select>
-        <div className="segmented small">
-          {(['all', 'raw', 'graded'] as const).map((f) => (
-            <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>
-              {f === 'all' ? 'All' : f === 'raw' ? 'Raw' : 'Graded'}
+        <div className="segmented small" role="group" aria-label="Show">
+          {(Object.keys(FILTERS) as Filter[]).map((f) => (
+            <button key={f} className={filter === f ? 'on' : ''} aria-pressed={filter === f} onClick={() => setFilter(f)}>
+              {FILTERS[f]}
             </button>
           ))}
         </div>
       </div>
+
+      {dupes && dupes.cards > 0 && (
+        <p className="muted small dupes-summary">
+          {plural(dupes.cards, 'card')} you have more than one of:{' '}
+          <strong>{plural(dupes.copies, 'spare copy', 'spare copies')}</strong>, worth about {format(dupes.value, currency)}{' '}
+          (keeping your most valuable copy of each).
+        </p>
+      )}
 
       {error && (
         <p className="error">
@@ -200,15 +292,19 @@ export function CollectionPage() {
           )}
         </div>
       )}
-      {data && data.items.length > 0 && items.length === 0 && <p className="muted center">No cards match.</p>}
+      {data && data.items.length > 0 && items.length === 0 && (
+        <p className="muted center">
+          {filter === 'dupes' && !query.trim() ? 'No duplicates: you have one copy of every card.' : 'No cards match.'}
+        </p>
+      )}
 
       {groups
         ? groups.map((g) => (
-            <section key={g.artist} className="group">
+            <section key={g.key} className="group">
               <h2 className="group-head">
-                <a href={href('artist', g.artist)}>🖌 {g.artist}</a>
-                <span className="faint small">
-                  {g.items.length} · {format(g.value, currency)}
+                {g.head}
+                <span className="group-count small">
+                  {g.count} · {format(g.value, currency)}
                 </span>
               </h2>
               <div className="grid">

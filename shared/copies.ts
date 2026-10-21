@@ -31,3 +31,37 @@ export function sameCopy(a: ItemFields, b: ItemFields): boolean {
 export function entryFor<T extends ItemFields>(entries: T[], add: ItemFields): T | undefined {
   return entries.find((e) => sameCopy(e, add) && e.quantity + add.quantity <= MAX_QUANTITY);
 }
+
+interface Entry extends ItemFields {
+  id: string;
+  cardId: string;
+  createdAt: string;
+}
+
+/** Entries of the same copy to combine: `absorb` are counted into `keep`, giving it `quantity` copies. */
+export interface Merge<T extends Entry> {
+  keep: T;
+  absorb: T[];
+  quantity: number;
+}
+
+/**
+ * Entries that are copies of the same card with the same details (made before adding a card
+ * counted it with the ones already there, or by edits since): each is combined into the oldest,
+ * the same way adding them now would.
+ */
+export function planMerges<T extends Entry>(entries: T[]): Merge<T>[] {
+  const kept = new Map<string, Merge<T>[]>(); // card id → its entries so far
+  for (const e of [...entries].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+    const card = kept.get(e.cardId) ?? [];
+    kept.set(e.cardId, card);
+    const into = card.find((m) => sameCopy(m.keep, e) && m.quantity + e.quantity <= MAX_QUANTITY);
+    if (into) {
+      into.absorb.push(e);
+      into.quantity += e.quantity;
+    } else {
+      card.push({ keep: e, absorb: [], quantity: e.quantity });
+    }
+  }
+  return [...kept.values()].flat().filter((m) => m.absorb.length > 0);
+}

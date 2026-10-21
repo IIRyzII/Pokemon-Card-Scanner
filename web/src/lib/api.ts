@@ -9,6 +9,7 @@ import type {
   CollectionResponse,
   ItemFields,
   NewItemInput,
+  MergeResponse,
   NewSaleInput,
   PriceRefreshResponse,
   SaleRow,
@@ -113,6 +114,7 @@ export const api = {
   restoreItem: (id: string) => request<{ item: CollectionItem }>('POST', `/api/collection/${enc(id)}/restore`),
   purgeItem: (id: string) => request<{ ok: true }>('DELETE', `/api/collection/${enc(id)}/purge`),
   refreshPrices: () => request<PriceRefreshResponse>('POST', '/api/collection/refresh-prices'),
+  mergeDuplicates: () => request<MergeResponse>('POST', '/api/collection/merge-duplicates'),
 
   card: (cardId: string) => request<CardDetailResponse>('GET', `/api/cards/${enc(cardId)}`),
   refreshCard: (cardId: string, variant?: string) =>
