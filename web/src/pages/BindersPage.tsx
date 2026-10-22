@@ -18,6 +18,7 @@ import { IconPlus } from '../components/Icons.tsx';
 import { ProgressBar } from '../components/ProgressBar.tsx';
 import { BinderShelf, type ShelfItem } from '../components/BinderShelf.tsx';
 import { ColourPicker } from '../components/ColourPicker.tsx';
+import { useFeedback } from '../components/feedback.tsx';
 import { Sheet } from '../components/Sheet.tsx';
 import { api } from '../lib/api.ts';
 import {
@@ -66,6 +67,8 @@ export function BindersPage() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [view, setViewState] = useState(readView);
+  const [arranging, setArranging] = useState(false);
+  const { toast } = useFeedback();
   const canEdit = hasRole(user?.role, 'editor');
   const known = useCallback((cardId: string) => catalog?.byId.get(cardId)?.variants ?? null, [catalog]);
   const owned = useMemo(() => ownedPrintings(data?.items ?? [], known), [data, known]);
@@ -96,6 +99,20 @@ export function BindersPage() {
       })),
     [binders, owned, priceOf, known],
   );
+
+  /** A new order on the shelf: shown at once, saved for everyone, put back if it can't be. */
+  async function reorder(ids: string[]) {
+    if (!binders) return;
+    const before = binders;
+    const byId = new Map(binders.map((b) => [b.id, b]));
+    setBinders(ids.flatMap((id) => byId.get(id) ?? []));
+    try {
+      setBinders((await api.orderBinders(ids)).binders);
+    } catch (err) {
+      setBinders(before);
+      toast((err as Error).message, 'error');
+    }
+  }
 
   function setView(v: 'shelf' | 'list') {
     setViewState(v);
@@ -142,10 +159,21 @@ export function BindersPage() {
                 List
               </button>
             </div>
-            {view === 'shelf' && <span className="faint small">Hover over a binder, or tap it, to see how full it is. Tap again to open it.</span>}
+            {view === 'shelf' && canEdit && items.length > 1 && (
+              <button className={`btn small${arranging ? ' primary' : ''}`} aria-pressed={arranging} onClick={() => setArranging((a) => !a)}>
+                {arranging ? 'Done' : 'Arrange'}
+              </button>
+            )}
+            {view === 'shelf' && (
+              <span className="faint small">
+                {arranging
+                  ? 'Drag the binders into the order you want them on the shelf (or pick one and use the arrow keys).'
+                  : `Hover over a binder, or tap it, to see how full it is. Tap again to open it.${canEdit && items.length > 1 ? ' Drag one to move it (on a phone, tap Arrange first).' : ''}`}
+              </span>
+            )}
           </div>
           {view === 'shelf' ? (
-            <BinderShelf items={items} money={money} />
+            <BinderShelf items={items} money={money} onReorder={canEdit ? reorder : undefined} arranging={arranging} />
           ) : (
             <ul className="set-list">
               {items.map(({ binder: b, stats: s }) => (

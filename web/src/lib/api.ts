@@ -7,6 +7,7 @@ import type {
   Binder,
   BinderInput,
   CardDetailResponse,
+  CardPricesResponse,
   CollectionItem,
   CollectionResponse,
   ItemFields,
@@ -16,6 +17,8 @@ import type {
   PriceRefreshResponse,
   SaleRow,
   User,
+  Want,
+  WantInput,
 } from '../../../shared/types.ts';
 
 const API_URL_KEY = 'pokevault.apiUrl';
@@ -134,6 +137,15 @@ export const api = {
   createBinder: (input: BinderInput) => request<{ binder: Binder }>('POST', '/api/binders', input),
   updateBinder: (id: string, patch: Partial<BinderInput>) => request<{ binder: Binder }>('PATCH', `/api/binders/${enc(id)}`, patch),
   deleteBinder: (id: string) => request<{ ok: true }>('DELETE', `/api/binders/${enc(id)}`),
+  /** Every binder's id, left to right on the shelf. */
+  orderBinders: (ids: string[]) => request<{ binders: Binder[] }>('PUT', '/api/binders/order', { ids }),
+
+  wants: () => request<{ wants: Want[] }>('GET', '/api/wants'),
+  /** Puts a card on the want list, or changes it if that printing is already on it. */
+  saveWant: (input: WantInput) => request<{ want: Want; created: boolean }>('POST', '/api/wants', input),
+  deleteWant: (id: string) => request<{ ok: true }>('DELETE', `/api/wants/${enc(id)}`),
+  /** The prices stored for many cards (nothing fetched first). */
+  cardPrices: (cardIds: string[]) => request<CardPricesResponse>('POST', '/api/cards/prices', { cardIds }),
 
   users: () => request<{ users: User[] }>('GET', '/api/users'),
   createUser: (input: { email: string; displayName: string; role: string; key: string }) =>

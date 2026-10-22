@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 import { hasRole } from '../../shared/types.ts';
-import { IconBinder, IconBrush, IconCards, IconPlus, IconSets, IconShield, IconUser } from './components/Icons.tsx';
+import { IconBinder, IconCards, IconHeart, IconPlus, IconSets, IconShield, IconUser } from './components/Icons.tsx';
 import { CollectionProvider } from './lib/collection.tsx';
 import { CurrencyProvider } from './lib/currency.tsx';
 import { href, useRoute } from './lib/router.ts';
 import { useSession } from './lib/session.tsx';
+import { WantsProvider } from './lib/wantsContext.tsx';
 import { AccountPage } from './pages/AccountPage.tsx';
 import { AddPage } from './pages/AddPage.tsx';
 import { AdminPage } from './pages/AdminPage.tsx';
@@ -21,6 +22,7 @@ import { PendingPage } from './pages/PendingPage.tsx';
 import { SetPage } from './pages/SetPage.tsx';
 import { SetsPage } from './pages/SetsPage.tsx';
 import { TrashPage } from './pages/TrashPage.tsx';
+import { WantsPage } from './pages/WantsPage.tsx';
 
 export function App() {
   const { status, user } = useSession();
@@ -30,7 +32,9 @@ export function App() {
   return (
     <CurrencyProvider>
       <CollectionProvider>
-        <Shell />
+        <WantsProvider>
+          <Shell />
+        </WantsProvider>
       </CollectionProvider>
     </CurrencyProvider>
   );
@@ -78,6 +82,9 @@ function Shell() {
       if (route.parts[2] !== 'edit') page = <BinderPage key={id} id={id} />;
       else page = canEdit ? <BinderEditPage key={id} id={id} /> : <NotAllowed />;
       break;
+    case 'wants':
+      page = <WantsPage />;
+      break;
     case 'trash':
       page = canEdit ? <TrashPage /> : <NotAllowed />;
       break;
@@ -110,10 +117,11 @@ function Shell() {
       <main>{page}</main>
       <nav className="tabbar" aria-label="Main">
         {tab('#/', 'Collection', <IconCards />, !section || section === 'item')}
-        {tab('#/sets', 'Sets', <IconSets />, section === 'sets' || section === 'set')}
+        {/* Artists are under Sets (one tab fewer, for the want list) */}
+        {tab('#/sets', 'Sets', <IconSets />, ['sets', 'set', 'artists', 'artist'].includes(section ?? ''))}
         {tab('#/binders', 'Binders', <IconBinder />, section === 'binders' || section === 'binder')}
+        {tab('#/wants', 'Wants', <IconHeart />, section === 'wants')}
         {canEdit && tab(href('add', 'scan'), 'Add', <IconPlus />, section === 'add' || section === 'card')}
-        {tab('#/artists', 'Artists', <IconBrush />, section === 'artists' || section === 'artist')}
         {isAdmin && tab('#/admin', 'Admin', <IconShield />, section === 'admin')}
         {tab('#/account', 'Account', <IconUser />, section === 'account')}
       </nav>

@@ -11,11 +11,19 @@ A phone-friendly web app for tracking a Pokémon card collection:
   - If older duplicate entries are still separate (added before copies were counted together, or edited to match), the collection page offers to **Combine** them, and so does **Account → Duplicate entries**. The number of cards stays the same.
 - **Binders**: your real binders, page by page, in the **Binders** tab.
   - They stand on a **bookshelf**, each spine in its colour (12 to choose from), thicker the more pages it has. Hover over one, or tap it, to see its name, how full it is, what's in it worth and what completing it would cost; tap it again (or **Open binder**) to open it. Prefer a plain list? Switch to **List**.
+  - **Put them in order** by dragging a binder along the shelf (or to another shelf); the others slide over to make room. On a phone, tap **Arrange** first so dragging doesn't scroll the page. While arranging, the arrow keys move a binder too. The order is saved for everyone, and the list follows it.
   - Make one from **a set** (every Paradox Rift card in number order, or the master set with every printing side by side), from **a Pokémon** (every Shuckle, 9 copies of each), or start empty. Pages hold 4, 9 or 12 pockets.
   - Each pocket shows its card in colour when the collection has a copy in that printing, greyed out when it doesn't, with a footnote saying which printing goes there (Regular, Holo, Reverse Holo…). Each copy fills one pocket, so 4 Shuckles fill 4 of the 9 kept for that card.
   - **Missing** lists what's still needed, with the page and pocket it goes in and roughly what completing the binder would cost.
   - **Edit** changes the copies of single cards (18 of some), their printing and order, and adds cards by search. Each card shows the page and pocket it starts at.
   - On a big screen, pages sit side by side like the open binder, page 1 opposite the inside cover.
+- **Want list**: the **Wants** tab lists every card you still need, set by set, and what getting them would cost.
+  - Every empty pocket in your binders is on it automatically. Add any other card with **♡ Want it** on its page: pick the printing, how many copies, how much you want it (**★★★ Must have**, **★★ Want**, **★ Someday**), the most you'd pay, and a note. Copies you already have count towards both, so 4 Shuckles mean 5 more for a 9-copy row.
+  - Each set shows its logo, how much of it you have, the cards still to get and what they cost. Cards are priced for the printing wanted (a reverse holo at the reverse holo's price) once the app has fetched that card's prices; until then ≈ marks the price of its usual printing.
+  - At the top: what everything costs, what the must-haves cost, and the priciest card. A card at or under the most you'd pay glows green as a **Deal**.
+  - **Budget planner**: put in what you have to spend. It keeps a **buffer** back for prices moving and postage (10% unless you pick 0, 5, 15 or 20%), then picks the best cards for the rest: **Must-haves first** (as many must-haves as it can, cheapest first, then wants, then somedays), **Most cards** (cheapest first) or **Biggest cards** (the most valuable that fit). It shows how many cards that is, the spend per priority, the shopping list with each card's priority and price, and the next card just out of reach with how much more it would take. **In budget** shows just those cards.
+  - Tap a card for its price, where it goes in your binders, links to Cardmarket, TCGplayer and eBay, and **✓ Bought it**, which adds a copy to the collection. Cards you've got since your last visit are ticked off at the top.
+  - **Copy list** copies the list (or the shopping list) as text, set by set, to paste into a message or take to a card shop.
 - Every card shows its **image, name, set, number** and **price**. Totals for the whole collection are at the top.
 - **Raw prices** (TCGplayer + Cardmarket) refresh when you open the app, and the app keeps its **own price history**.
   - **Language**: TCGplayer only sells English cards, so English copies are valued from it. French, German, Italian, Spanish and Portuguese copies are valued from Cardmarket, where those languages trade. Neither gives a price per language: Cardmarket's covers a card in any language, and the app says so ("Cardmarket trend (all languages)"). Japanese, Korean and Chinese cards come from their own sets, which the catalog doesn't include.
@@ -25,7 +33,7 @@ A phone-friendly web app for tracking a Pokémon card collection:
   - eBay links open your local eBay (ebay.co.uk for GBP).
 - **Graded prices**: log eBay sold prices (one tap opens eBay's *sold* listings for that exact card and grade). Optional PriceCharting support fills in PSA/BGS/CGC/SGC prices automatically.
 - **Sets**: every set (Paradox Rift, 151, Base Set…) in the **Sets** tab, with how close you are to completing it, what the whole set is worth at market prices, what your cards from it are worth, and what completing it would cost. Open a set to see every card in number order, with its price and the ones you're missing greyed out. You can also sort a set by price.
-- **Artists**: sort your collection by illustrator, browse every artist's cards and see which ones you own. Each card links to Serebii and Art of Pokémon.
+- **Artists** (under the **Sets** tab): sort your collection by illustrator, browse every artist's cards and see which ones you own. Each card links to Serebii and Art of Pokémon.
 - **Login + roles (RBAC)**: Admin, Editor, Viewer and Pending, plus an activity log, a "recently removed" trash and backups.
 - Works like an app on your phone: **Add to Home Screen** and it opens full screen, even offline.
 

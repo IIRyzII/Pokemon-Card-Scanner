@@ -36,6 +36,12 @@ export const IconBinder = (p: P) => (
     <path d="M3 7h4M3 12h4M3 17h4M11 8h5M11 12h5" />
   </svg>
 );
+/** A heart (the want list); `filled` when the card is on it */
+export const IconHeart = ({ filled, ...p }: P & { filled?: boolean }) => (
+  <svg {...base(p)} fill={filled ? 'currentColor' : 'none'}>
+    <path d="M12 20s-7-4.4-9.2-8.6C1.2 8.3 3 4.8 6.6 4.5c2.1-.2 3.9 1 5.4 3 1.5-2 3.3-3.2 5.4-3 3.6.3 5.4 3.8 3.8 6.9C19 15.6 12 20 12 20z" />
+  </svg>
+);
 /** A checklist (the scan list) */
 export const IconList = (p: P) => (
   <svg {...base(p)}>

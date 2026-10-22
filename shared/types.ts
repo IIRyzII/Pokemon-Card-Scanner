@@ -149,6 +149,31 @@ export interface Binder {
 
 export type BinderInput = Pick<Binder, 'name' | 'pockets' | 'cards' | 'colour'>;
 
+/** A card picked by hand for the want list (binder gaps are on it without being stored). */
+export interface Want {
+  id: string;
+  cardId: string;
+  variant: string;
+  /** Copies wanted in all; copies in the collection count towards it */
+  quantity: number;
+  /** 1 must have, 2 want, 3 someday */
+  priority: number;
+  /** The most you'd pay for one copy */
+  maxPrice: number | null;
+  maxCurrency: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WantInput = Pick<Want, 'cardId' | 'variant'> &
+  Partial<Pick<Want, 'quantity' | 'priority' | 'maxPrice' | 'maxCurrency' | 'note'>>;
+
+/** POST /api/cards/prices: the market prices stored for each card (nothing is fetched first). */
+export interface CardPricesResponse {
+  prices: Record<string, PriceRow[]>;
+}
+
 /** POST /api/collection/merge-duplicates: `removed` entries were combined into `groups` entries. */
 export interface MergeResponse {
   groups: number;

@@ -304,13 +304,13 @@ export async function refreshStalePrices(env: Env, maxAgeMs: number): Promise<Pr
   await getRates(env); // once up front (and kept current even on quiet days), not by every card at once
   const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
   const failedCutoff = new Date(Date.now() - Math.min(maxAgeMs, RETRY_FAILED_MS)).toISOString();
+  // The collection's cards, and the ones on the want list (to price the printing wanted).
   const { results } = await env.DB.prepare(
-    `SELECT ci.card_id, MIN(pr.refreshed_at) AS refreshed_at
-       FROM collection_items ci LEFT JOIN price_refresh pr ON pr.card_id = ci.card_id
-      WHERE ci.deleted_at IS NULL
-        AND (pr.refreshed_at IS NULL OR pr.refreshed_at < ? OR (pr.status = 'error' AND pr.refreshed_at < ?))
-      GROUP BY ci.card_id
-      ORDER BY refreshed_at ASC`,
+    `SELECT ids.card_id, pr.refreshed_at
+       FROM (SELECT card_id FROM collection_items WHERE deleted_at IS NULL UNION SELECT card_id FROM wants) ids
+       LEFT JOIN price_refresh pr ON pr.card_id = ids.card_id
+      WHERE pr.refreshed_at IS NULL OR pr.refreshed_at < ? OR (pr.status = 'error' AND pr.refreshed_at < ?)
+      ORDER BY pr.refreshed_at ASC`,
   )
     .bind(cutoff, failedCutoff)
     .all<{ card_id: string }>();

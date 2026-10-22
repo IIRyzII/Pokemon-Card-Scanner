@@ -4,6 +4,7 @@ import { artistKey, normName } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { href } from '../lib/router.ts';
 import { useCatalog } from '../lib/useCatalog.ts';
+import { SetsArtistsSwitch } from './SetsPage.tsx';
 
 type Sort = 'owned' | 'cards' | 'name';
 
@@ -42,6 +43,7 @@ export function ArtistsPage() {
 
   return (
     <div className="page">
+      <SetsArtistsSwitch at="artists" />
       <h1>Artists</h1>
       <p className="muted small">
         The illustrators behind every card. Tap one to see all of their cards and which ones you have.

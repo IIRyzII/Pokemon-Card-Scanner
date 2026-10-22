@@ -2,7 +2,7 @@
 
 import { Hono } from 'hono';
 import { VARIANTS } from '../../../shared/grading.ts';
-import type { CardDetailResponse } from '../../../shared/types.ts';
+import type { CardDetailResponse, CardPricesResponse, PriceRow } from '../../../shared/types.ts';
 import { authenticate, requireRole } from '../auth.ts';
 import { ITEM_SELECT, auditStmt, toHistory, toItem, toPrice, toSale } from '../db.ts';
 import { HttpError, nowIso, type AppEnv, type Env } from '../env.ts';
@@ -16,6 +16,12 @@ import {
   refreshPriceCharting,
 } from '../prices.ts';
 import { cardId as parseCardId, oneOf, readJson, requiredText } from '../validate.ts';
+
+/** Most cards one /prices request can ask for (the want list of a few big binders). */
+const MAX_PRICE_CARDS = 1500;
+/** Cards a /prices request fetches prices for afresh, in the background, when they're older than… */
+const BACKGROUND_REFRESHES = 6;
+const WANTED_PRICE_TTL_MS = 2 * 86_400_000;
 
 const cards = new Hono<AppEnv>();
 cards.use('*', authenticate, requireRole('viewer'));
@@ -51,6 +57,42 @@ async function cardDetail(env: Env, cardId: string): Promise<CardDetailResponse>
     owned: (owned.results as Row[]).map(toItem),
   };
 }
+
+/**
+ * The market prices stored for many cards at once (the want list): none are fetched first, but a
+ * few of the stalest are fetched afresh in the background, so a list that's looked at gets
+ * exact prices for each printing over time.
+ */
+cards.post('/prices', async (c) => {
+  const body = await readJson(c.req.raw);
+  if (!Array.isArray(body.cardIds)) throw new HttpError(400, 'cardIds must be a list');
+  if (body.cardIds.length > MAX_PRICE_CARDS) throw new HttpError(400, `At most ${MAX_PRICE_CARDS} cards at a time`);
+  const ids = [...new Set(body.cardIds.map(parseCardId))];
+  const prices: Record<string, PriceRow[]> = {};
+  const refreshedAt = new Map<string, string>();
+  // D1 takes at most 100 values per statement.
+  for (let i = 0; i < ids.length; i += 90) {
+    const chunk = ids.slice(i, i + 90);
+    const marks = chunk.map(() => '?').join(', ');
+    const [rows, refreshed] = await c.env.DB.batch([
+      c.env.DB.prepare(`SELECT * FROM card_prices WHERE card_id IN (${marks})`).bind(...chunk),
+      c.env.DB.prepare(`SELECT card_id, refreshed_at FROM price_refresh WHERE card_id IN (${marks})`).bind(...chunk),
+    ]);
+    for (const r of rows.results as Row[]) (prices[r.card_id as string] ??= []).push(toPrice(r));
+    for (const r of refreshed.results as Row[]) refreshedAt.set(r.card_id as string, r.refreshed_at as string);
+  }
+  const stale = ids
+    .filter((id) => !refreshedAt.has(id) || Date.now() - Date.parse(refreshedAt.get(id)!) > WANTED_PRICE_TTL_MS)
+    .sort((a, b) => (refreshedAt.get(a) ?? '').localeCompare(refreshedAt.get(b) ?? ''))
+    .slice(0, BACKGROUND_REFRESHES);
+  if (stale.length) {
+    const budget = { cardmarketFiles: 4 };
+    c.executionCtx.waitUntil(
+      Promise.all(stale.map((id) => refreshMarketPrices(c.env, id, false, budget).catch((err) => console.warn('price refresh failed', id, err)))),
+    );
+  }
+  return c.json<CardPricesResponse>({ prices });
+});
 
 cards.get('/:cardId', async (c) => {
   const env = c.env;

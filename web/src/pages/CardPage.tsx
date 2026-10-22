@@ -4,8 +4,11 @@ import { hasRole, type CardDetailResponse } from '../../../shared/types.ts';
 import { AddToCollection } from '../components/AddToCollection.tsx';
 import { CardImage } from '../components/CardImage.tsx';
 import { gradeBadge, variantLabel } from '../components/CardTile.tsx';
-import { IconBack, IconPlus } from '../components/Icons.tsx';
+import { IconBack, IconHeart, IconPlus } from '../components/Icons.tsx';
 import { PriceSection } from '../components/PriceSection.tsx';
+import { WantSheet } from '../components/WantSheet.tsx';
+import { printingNote } from '../lib/binders.ts';
+import { useWants } from '../lib/wantsContext.tsx';
 import { api } from '../lib/api.ts';
 import { canonicalArtist } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
@@ -23,6 +26,9 @@ export function CardPage({ cardId }: { cardId: string }) {
   const [detail, setDetail] = useState<CardDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [wanting, setWanting] = useState(false);
+  const { byCard } = useWants();
+  const wanted = byCard.get(cardId) ?? [];
   const canEdit = hasRole(user?.role, 'editor');
   const fromCatalog = catalog?.byId.get(cardId);
 
@@ -85,9 +91,19 @@ export function CardPage({ cardId }: { cardId: string }) {
           )}
 
           {canEdit && (
-            <button className="btn primary big" onClick={() => setAdding(true)} disabled={!card}>
-              <IconPlus /> Add to collection
-            </button>
+            <div className="card-actions">
+              <button className="btn primary big" onClick={() => setAdding(true)} disabled={!card}>
+                <IconPlus /> Add to collection
+              </button>
+              <button className={`btn big want-btn${wanted.length ? ' on' : ''}`} onClick={() => setWanting(true)} disabled={!fromCatalog}>
+                <IconHeart filled={wanted.length > 0} /> {wanted.length ? 'On your want list' : 'Want it'}
+              </button>
+            </div>
+          )}
+          {wanted.length > 0 && (
+            <p className="faint small">
+              Wanted: {wanted.map((w) => `${printingNote(w.variant)} ×${w.quantity}`).join(', ')} · <a href="#/wants">want list</a>
+            </p>
           )}
 
           {owned.length > 0 && (
@@ -125,6 +141,7 @@ export function CardPage({ cardId }: { cardId: string }) {
       )}
 
       {adding && card && <AddToCollection card={card} detail={detail} onClose={() => setAdding(false)} />}
+      {wanting && <WantSheet cardId={cardId} onClose={() => setWanting(false)} />}
     </div>
   );
 }

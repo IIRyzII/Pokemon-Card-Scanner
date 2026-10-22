@@ -64,9 +64,31 @@ const summary = (b: { name: string; pockets: number; cards: BinderCard[] }) => (
   copies: b.cards.reduce((n, c) => n + c.copies, 0),
 });
 
-binders.get('/', async (c) => {
-  const { results } = await c.env.DB.prepare('SELECT * FROM binders ORDER BY created_at').all<Row>();
-  return c.json({ binders: results.map(toBinder) });
+/** Shelf order: the ones put in order first, then the rest oldest first. */
+const SHELF_ORDER = 'ORDER BY position IS NULL, position, created_at';
+
+async function shelf(env: Env): Promise<Binder[]> {
+  const { results } = await env.DB.prepare(`SELECT * FROM binders ${SHELF_ORDER}`).all<Row>();
+  return results.map(toBinder);
+}
+
+binders.get('/', async (c) => c.json({ binders: await shelf(c.env) }));
+
+/** Puts the binders on the shelf in this order (every binder's id, left to right). */
+binders.put('/order', requireRole('editor'), async (c) => {
+  const body = await readJson(c.req.raw);
+  const current = await shelf(c.env);
+  const ids = body.ids;
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) throw new HttpError(400, 'ids must be a list of binder ids');
+  const known = new Set(current.map((b) => b.id));
+  if (ids.length !== known.size || new Set(ids).size !== ids.length || ids.some((id) => !known.has(id))) {
+    throw new HttpError(409, 'The binders changed meanwhile: reload and try again');
+  }
+  await c.env.DB.batch([
+    ...ids.map((id, position) => c.env.DB.prepare('UPDATE binders SET position = ? WHERE id = ?').bind(position, id)),
+    auditStmt(c.env, c.get('user'), 'reorder', 'binder', null, { order: ids.map((id) => current.find((b) => b.id === id)!.name) }),
+  ]);
+  return c.json({ binders: await shelf(c.env) });
 });
 
 binders.get('/:id', async (c) => c.json({ binder: await loadBinder(c.env, c.req.param('id')) }));
@@ -78,7 +100,8 @@ binders.post('/', requireRole('editor'), async (c) => {
   const user = c.get('user');
   await c.env.DB.batch([
     c.env.DB.prepare(
-      'INSERT INTO binders (id, name, pockets, cards, colour, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      `INSERT INTO binders (id, name, pockets, cards, colour, position, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, (SELECT MAX(position) + 1 FROM binders), ?, ?, ?)`,
     ).bind(id, b.name, b.pockets, JSON.stringify(b.cards), b.colour, user.id, now, now),
     auditStmt(c.env, user, 'add', 'binder', id, summary(b)),
   ]);

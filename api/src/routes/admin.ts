@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { authenticate, requireRole } from '../auth.ts';
 import { ITEM_SELECT, toAudit, toItem, toSale, toUser } from '../db.ts';
 import { toBinder } from './binders.ts';
+import { toWant } from './wants.ts';
 import { nowIso, type AppEnv } from '../env.ts';
 import { number } from '../validate.ts';
 
@@ -22,12 +23,13 @@ admin.get('/audit', async (c) => {
 
 /** Everything except password hashes and sessions, as one JSON document. */
 admin.get('/export', async (c) => {
-  const [users, items, sales, maps, binders] = await c.env.DB.batch([
+  const [users, items, sales, maps, binders, wants] = await c.env.DB.batch([
     c.env.DB.prepare('SELECT * FROM users ORDER BY created_at'),
     c.env.DB.prepare(`${ITEM_SELECT} ORDER BY ci.created_at`),
     c.env.DB.prepare('SELECT * FROM sales ORDER BY sold_on'),
     c.env.DB.prepare('SELECT * FROM pricecharting_map'),
     c.env.DB.prepare('SELECT * FROM binders ORDER BY created_at'),
+    c.env.DB.prepare('SELECT * FROM wants ORDER BY created_at'),
   ]);
   type Row = Record<string, unknown>;
   return c.json({
@@ -38,6 +40,7 @@ admin.get('/export', async (c) => {
     sales: (sales.results as Row[]).map(toSale),
     priceChartingMatches: maps.results,
     binders: (binders.results as Row[]).map(toBinder),
+    wants: (wants.results as Row[]).map(toWant),
   });
 });
 

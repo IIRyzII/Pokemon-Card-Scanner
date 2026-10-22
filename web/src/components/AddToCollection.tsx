@@ -24,15 +24,22 @@ interface Props {
   card: CardInfo;
   detail: CardDetailResponse | null;
   onClose: () => void;
+  /** The printing to start with (else the card's most likely one) */
+  variant?: string;
+  /** Called once added, instead of opening the new copy (the want list stays where it is) */
+  onAdded?: () => void;
 }
 
-export function AddToCollection({ card, detail, onClose }: Props) {
+export function AddToCollection({ card, detail, onClose, variant, onAdded }: Props) {
   const { ctx, currency } = useCurrency();
   const { catalog } = useCatalog();
   // The catalog knows (or has worked out) printings TCGdex doesn't: its best guess comes first.
   const printings = preferPrintings(card.variants, catalog?.byId.get(card.id)?.variants);
   const [step, setStep] = useState<'details' | 'confirm'>('details');
-  const [fields, setFields] = useState<ItemFields>(() => defaultFields(printings, currency));
+  const [fields, setFields] = useState<ItemFields>(() => {
+    const start = defaultFields(printings, currency);
+    return variant && printings.includes(variant) ? { ...start, variant } : start;
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useFeedback();
@@ -52,7 +59,8 @@ export function AddToCollection({ card, detail, onClose }: Props) {
       await reload();
       toast(merged ? `Counted with your other ${item.name}: now ×${item.quantity}` : `Added ${item.name} to the collection`);
       onClose();
-      navigate(`/item/${encodeURIComponent(item.id)}`);
+      if (onAdded) onAdded();
+      else navigate(`/item/${encodeURIComponent(item.id)}`);
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);

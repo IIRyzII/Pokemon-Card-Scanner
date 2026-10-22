@@ -35,6 +35,13 @@ export function ebaySoldUrl(
   return `https://${domain}/sch/i.html?_nkw=${q(parts.join(' '))}&LH_Sold=1&LH_Complete=1&_sop=13`;
 }
 
+/** Cards for sale on eBay now (raw copies). */
+export function ebayBuyUrl(card: CardRef, domain = 'www.ebay.com'): string {
+  const num = cardNumberText(card.number, card.setTotal);
+  const parts = [card.name, num, ...(num.includes('/') ? [] : [card.setName]), '-PSA -BGS -CGC -SGC -graded -slab'];
+  return `https://${domain}/sch/i.html?_nkw=${q(parts.join(' '))}`;
+}
+
 export function priceChartingSearchUrl(card: CardRef): string {
   return `https://www.pricecharting.com/search-products?type=prices&q=${q(`${card.name} ${card.number} ${card.setName}`)}`;
 }

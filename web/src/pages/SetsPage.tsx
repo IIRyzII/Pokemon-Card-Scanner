@@ -15,6 +15,20 @@ interface Row extends SetProgress {
   value: SetValue | null;
 }
 
+/** Sets and artists share a tab: this switches between them. */
+export function SetsArtistsSwitch({ at }: { at: 'sets' | 'artists' }) {
+  return (
+    <nav className="segmented small page-switch" aria-label="Browse by">
+      <a href="#/sets" className={at === 'sets' ? 'on' : ''} aria-current={at === 'sets' ? 'page' : undefined}>
+        Sets
+      </a>
+      <a href="#/artists" className={at === 'artists' ? 'on' : ''} aria-current={at === 'artists' ? 'page' : undefined}>
+        Artists
+      </a>
+    </nav>
+  );
+}
+
 /** Every set, with how much of it is in the collection and what it's worth. */
 export function SetsPage() {
   const { catalog, error } = useCatalog();
@@ -66,6 +80,7 @@ export function SetsPage() {
 
   return (
     <div className="page">
+      <SetsArtistsSwitch at="sets" />
       <h1>Sets</h1>
       {catalog && (
         <p className="muted small">
