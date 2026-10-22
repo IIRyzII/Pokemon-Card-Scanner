@@ -165,3 +165,17 @@ test("English copies are valued from TCGplayer (English only), other languages f
   const german = valueItem(copy('de'), prices.slice(0, 1), [], USD, now);
   assert.deepEqual([german.unit, german.detail], [0.5, 'TCGplayer market price (English copies)']);
 });
+
+test('a special printing is valued by its own Cardmarket product, else its plain printing (said so)', () => {
+  const cosmos = { variant: 'holo~cosmos', grader: 'RAW', grade: null, gradeLabel: null };
+  const prices = [
+    price({ source: 'tcgplayer', variant: 'holo', market: 0.14 }),
+    price({ source: 'cardmarket', variant: 'main', market: 0.12, currency: 'EUR' }),
+    price({ source: 'cardmarket', variant: 'holo~cosmos', market: 0.96, currency: 'EUR' }),
+  ];
+  const own = valueItem(cosmos, prices, [], EUR, now);
+  assert.deepEqual([own.unit, own.source], [0.96, 'cardmarket']);
+  const plain = valueItem(cosmos, prices.slice(0, 2), [], USD, now);
+  assert.deepEqual([plain.unit, plain.source], [0.14, 'tcgplayer']);
+  assert.match(plain.detail, /for its plain printing \(none for this one yet\)$/);
+});

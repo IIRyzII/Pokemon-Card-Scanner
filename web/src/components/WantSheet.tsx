@@ -4,11 +4,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BINDER_COLOURS } from '../../../shared/binders.ts';
 import { cardNumberText, cardmarketSearchUrl, ebayBuyUrl, ebaySoldUrl, tcgplayerUrl } from '../../../shared/links.ts';
-import { fixPrinting, printingOrder } from '../../../shared/printings.ts';
+import { fixPrinting } from '../../../shared/printings.ts';
 import { hasRole, type CardDetailResponse } from '../../../shared/types.ts';
 import { DEFAULT_PRIORITY, MAX_WANT_QUANTITY, PRIORITY_VALUES, WANT_PRIORITIES } from '../../../shared/wants.ts';
 import { api } from '../lib/api.ts';
-import { printingNote } from '../lib/binders.ts';
+import { allPrintingsOf, printingNote } from '../lib/binders.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
 import { href } from '../lib/router.ts';
@@ -46,7 +46,7 @@ export function WantSheet({ cardId, variant: startVariant, entry, onClose }: Pro
   const canEdit = hasRole(user?.role, 'editor');
   const card = catalog?.byId.get(cardId);
   const mine = byCard.get(cardId) ?? [];
-  const printings: string[] = card?.variants?.length ? printingOrder(card.variants) : ['normal'];
+  const printings: string[] = card ? allPrintingsOf(card) : ['normal'];
   const [variant, setVariant] = useState(startVariant ?? mine[0]?.variant ?? printings[0]);
   const existing = mine.find((w) => w.variant === variant) ?? null;
 
@@ -83,7 +83,7 @@ export function WantSheet({ cardId, variant: startVariant, entry, onClose }: Pro
   const limit = maxPrice.trim() === '' ? null : Number(maxPrice);
   const deal = limit !== null && price.each !== null && price.each <= limit + 0.005;
   const owned = (ownedByCard.get(cardId) ?? [])
-    .filter((i) => fixPrinting(i.variant, card?.variants) === variant)
+    .filter((i) => fixPrinting(i.variant, card ? allPrintingsOf(card) : null) === variant)
     .reduce((n, i) => n + i.quantity, 0);
   const places = entry?.variant === variant ? entry.binders : [];
 

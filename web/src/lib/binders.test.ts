@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import type { Variant } from '../../../shared/grading.ts';
 import {
+  allPrintingsOf,
   binderCards,
   binderStats,
   fixBinderPrintings,
+  knownPrintings,
   missingOf,
   percentFilled,
   ownedPrintings,
@@ -15,8 +18,9 @@ import {
   promoPrintings,
   promosOf,
   setCardsOf,
+  stampedPromosOf,
 } from './binders.ts';
-import { buildCatalog, type CatalogJson } from './catalog.ts';
+import { buildCatalog, type CatalogCard, type CatalogJson } from './catalog.ts';
 
 // Runs against the real generated catalog (npm run catalog).
 const cat = buildCatalog(JSON.parse(readFileSync(new URL('../../public/catalog/catalog.json', import.meta.url), 'utf8')) as CatalogJson);
@@ -61,32 +65,79 @@ test('printings: the first one, or all of them; unknown printings count as regul
   assert.deepEqual(printingsOf({ id: 'x', variants: null }, true), ['normal']);
 });
 
-test('promo printings: the holos of a few commons, last in a grand master set', () => {
+// The catalog has TCGdex's printing details card by card as builds fetch them (a build can stop part
+// way), so these hold either way; the ones that need the details are skipped until it has them.
+test('promo printings: not in a master set; last in a grand master set, then the stamped promo cards', () => {
   const rift = setCardsOf(cat, 'sv04');
-  const promos = promoPrintings(rift);
-  // Snorunt, Vanilluxe, Honedge and Doublade came as cosmos holos in blister packs and boxes
-  assert.deepEqual([...promos].sort(), ['sv04-037|holo', 'sv04-045|holo', 'sv04-131|holo', 'sv04-132|holo']);
-  const master = binderCards(rift, 'master', 1, promos);
-  assert.ok(!master.some((c) => c.cardId === 'sv04-037' && c.variant === 'holo'), 'not in a master set');
-  const grand = binderCards(rift, 'grand', 1, promos);
-  assert.equal(grand.length, master.length + 4);
-  assert.deepEqual(
-    grand.slice(-4).map((c) => `${c.cardId} ${c.variant}`),
-    ['sv04-037 holo', 'sv04-045 holo', 'sv04-131 holo', 'sv04-132 holo'],
-    'at the end, in the set order',
-  );
+  const promos = promosOf(cat, rift);
+  const stamped = stampedPromosOf(cat, rift);
+  const master = binderCards(rift, 'master', 1, promos, stamped);
+  const grand = binderCards(rift, 'grand', 1, promos, stamped);
+  const tail = grand.slice(master.length).map((c) => `${c.cardId}|${c.variant}`);
+  // Snorunt, Vanilluxe, Honedge and Doublade came as (cosmos) holos only in blister packs and boxes
+  for (const id of ['sv04-037', 'sv04-045', 'sv04-131', 'sv04-132']) {
+    assert.ok(tail.some((p) => p.startsWith(`${id}|holo`)), `${id}: its holo at the end`);
+    assert.ok(!master.some((c) => c.cardId === id && c.variant.startsWith('holo')), `${id}: no holo in a master set`);
+  }
   assert.deepEqual(
     master.filter((c) => c.cardId === 'sv04-037').map((c) => c.variant),
     ['normal', 'reverse'],
+  );
+  assert.deepEqual(grand.slice(0, master.length), master, 'a grand master set starts with the master set…');
+  assert.deepEqual(new Set(tail.slice(0, promos.size)), promos, '…then has the promo printings…');
+  assert.deepEqual(
+    tail.slice(promos.size),
+    stamped.flatMap((c) => allPrintingsOf(c).map((v) => `${c.id}|${v}`)),
+    '…then the stamped promo cards',
   );
   // A holo rare whose non-holo is a stamped deck card: its main printing is the holo
   const tempest = setCardsOf(cat, 'swsh12');
   const dragonite = tempest.find((c) => c.id === 'swsh12-131')!;
   assert.deepEqual(printingsOf(dragonite, false, promoPrintings(tempest)), ['holo']);
-  // Promo sets have no promo printings of their own; a card's only printing is never one
-  assert.equal(promoPrintings(setCardsOf(cat, 'svp')).size, 0);
-  assert.ok(!promosOf(cat, setCardsOf(cat, 'xy7')).has('xy7-75a|holo'));
+  // A promo set's card is never a promo printing of itself (a staff-stamped extra can be)
+  const svp = setCardsOf(cat, 'svp');
+  const svpPromos = promoPrintings(svp);
+  assert.ok(svp.every((c) => !svpPromos.has(`${c.id}|${printingsOf(c, false)[0]}`)));
+  assert.ok(!promosOf(cat, setCardsOf(cat, 'xy7')).has('xy7-75a|holo'), "a card's only printing is never one");
 });
+
+const realKingdra = cat.byId.get('sv04-032');
+test(
+  "Paradox Rift's Kingdra: its cosmos holo (from blister packs) only in a grand master set",
+  { skip: !realKingdra?.specials.length && "the catalog doesn't have TCGdex's printing details for it yet" },
+  () => {
+    const rift = setCardsOf(cat, 'sv04');
+    const promos = promosOf(cat, rift);
+    const kingdras = (choice: 'master' | 'grand') =>
+      binderCards(rift, choice, 1, promos)
+        .filter((c) => c.cardId === 'sv04-032')
+        .map((c) => c.variant);
+    assert.deepEqual(allPrintingsOf(realKingdra!), ['reverse', 'holo', 'holo~cosmos']);
+    assert.deepEqual(kingdras('master'), ['reverse', 'holo']);
+    assert.deepEqual(kingdras('grand'), ['reverse', 'holo', 'holo~cosmos']);
+  },
+);
+
+test(
+  "Paradox Rift's grand master set ends with its Build & Battle promos (SVP 057 Chi-Yu, stamped with the set's logo)",
+  { skip: cat.byId.get('svp-057')?.versionOf !== 'sv04-029' && "the catalog doesn't have TCGdex's printing details for it yet" },
+  () => {
+    const rift = setCardsOf(cat, 'sv04');
+    const promos = promosOf(cat, rift);
+    const stamped = stampedPromosOf(cat, rift);
+    assert.ok(stamped.every((c) => c.set.id === 'svp' && c.versionOf!.startsWith('sv04-')));
+    const lines = (choice: 'master' | 'grand') => binderCards(rift, choice, 1, promos, stamped).map((c) => `${c.cardId} ${c.variant}`);
+    assert.ok(!lines('master').some((l) => l.startsWith('svp-')));
+    const grand = lines('grand');
+    assert.deepEqual(
+      grand.filter((l) => l.startsWith('svp-057 ')),
+      ['svp-057 holo', 'svp-057 holo+set-logo+staff'],
+      'the card, and its staff-stamped version',
+    );
+    const stampedLines = stamped.flatMap((c) => allPrintingsOf(c).map((v) => `${c.id} ${v}`));
+    assert.deepEqual(grand.slice(-stampedLines.length), stampedLines, 'at the very end');
+  },
+);
 
 test('copies in the collection fill pockets of their card and printing, first pockets first', () => {
   const cards = [
@@ -173,4 +224,48 @@ test('a Shuckle-GX saved as "normal" before its printings were known fills a hol
     ['holo', 'reverse'],
   );
   assert.equal(pocketsOf(cards, owned).filter((p) => p.filled).length, 3);
+});
+
+test('a grand master set: the packs’ printings, then the promo printings, then the stamped promo cards', () => {
+  const rift = { id: 'sv04', name: 'Paradox Rift' } as CatalogCard['set'];
+  const svpSet = { id: 'svp', name: 'SVP Black Star Promos' } as CatalogCard['set'];
+  const card = (id: string, variants: Variant[], specials: string[], promos: string[], more: Partial<CatalogCard> = {}) =>
+    ({ id, set: rift, rarity: 'Rare', variants, specials, promos, versionOf: null, ...more }) as CatalogCard;
+  const moth = card('sv04-028', ['holo', 'reverse'], ['reverse~pokeball', 'reverse+gamestop'], ['reverse+gamestop']);
+  const chiYu = card('sv04-029', ['holo', 'reverse'], [], []);
+  const kingdra = card('sv04-032', ['holo', 'reverse'], ['holo~cosmos'], ['holo~cosmos']);
+  const svp057 = card('svp-057', ['holo'], ['holo+set-logo+staff'], ['holo+set-logo+staff'], { set: svpSet, versionOf: 'sv04-029' });
+  const all = [moth, chiYu, kingdra, svp057];
+  const catalog = {
+    cards: all,
+    byId: new Map(all.map((c) => [c.id, c])),
+    bySet: new Map([
+      ['sv04', [moth, chiYu, kingdra]],
+      ['svp', [svp057]],
+    ]),
+  };
+  const cards = [moth, chiYu, kingdra];
+  const promos = promosOf(catalog, cards);
+  const stamped = stampedPromosOf(catalog, cards);
+  assert.deepEqual(
+    stamped.map((c) => c.id),
+    ['svp-057'],
+    "Chi-Yu's Build & Battle promo",
+  );
+  const binder = (choice: 'one' | 'master' | 'grand') => binderCards(cards, choice, 1, promos, stamped).map((c) => `${c.cardId} ${c.variant}`);
+  assert.deepEqual(binder('one'), ['sv04-028 holo', 'sv04-029 holo', 'sv04-032 holo']);
+  const master = [
+    'sv04-028 reverse',
+    'sv04-028 holo',
+    'sv04-028 reverse~pokeball', // a pattern from the packs
+    'sv04-029 reverse',
+    'sv04-029 holo',
+    'sv04-032 reverse',
+    'sv04-032 holo',
+  ];
+  assert.deepEqual(binder('master'), master, 'no cosmos holo, no stamped ones');
+  assert.deepEqual(binder('grand'), [...master, 'sv04-028 reverse+gamestop', 'sv04-032 holo~cosmos', 'svp-057 holo', 'svp-057 holo+set-logo+staff']);
+  assert.deepEqual(allPrintingsOf(kingdra), ['reverse', 'holo', 'holo~cosmos']);
+  assert.deepEqual(knownPrintings(catalog)('sv04-032'), ['reverse', 'holo', 'holo~cosmos']);
+  assert.equal(knownPrintings(catalog)('nope'), null);
 });

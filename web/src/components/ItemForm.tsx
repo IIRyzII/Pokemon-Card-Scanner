@@ -13,7 +13,7 @@ import {
 } from '../../../shared/grading.ts';
 import { CURRENCIES } from '../../../shared/currency.ts';
 import { DEFAULT_LANGUAGE, LANGUAGES, LANGUAGE_CODES } from '../../../shared/languages.ts';
-import { printingOrder } from '../../../shared/printings.ts';
+import { printingLabel, printingOrder } from '../../../shared/printings.ts';
 import type { ItemFields } from '../../../shared/types.ts';
 import { useCurrency } from '../lib/currency.tsx';
 
@@ -61,7 +61,7 @@ export function ItemForm({ value, onChange, variants }: Props) {
               aria-pressed={value.variant === v}
               onClick={() => set({ variant: v })}
             >
-              {VARIANT_LABELS[v as Variant] ?? v}
+              {VARIANT_LABELS[v as Variant] ?? printingLabel(v)}
             </button>
           ))}
         </div>

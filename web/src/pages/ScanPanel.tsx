@@ -3,11 +3,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cardNumberText } from '../../../shared/links.ts';
-import { printingOrder } from '../../../shared/printings.ts';
 import { CardImage } from '../components/CardImage.tsx';
 import { variantLabel } from '../components/CardTile.tsx';
 import { IconCamera, IconImage } from '../components/Icons.tsx';
 import { defaultFields } from '../components/ItemForm.tsx';
+import { allPrintingsOf } from '../lib/binders.ts';
 import type { CatalogCard } from '../lib/catalog.ts';
 import { useCurrency } from '../lib/currency.tsx';
 import type { Candidate, Confidence, ScanGuess } from '../lib/match.ts';
@@ -176,7 +176,7 @@ export function ScanPanel() {
    */
   function confirmFind(card: CatalogCard, printing?: string) {
     if (!found) return;
-    const fields = defaultFields(card.variants ?? [], currency);
+    const fields = defaultFields(allPrintingsOf(card), currency);
     scanList.add(listCardOf(card), printing ? { ...fields, variant: printing } : fields);
     markFound(found[0].card.id); // what the scanner sees: not offered again until it leaves the view
     setFound(null);
@@ -298,7 +298,7 @@ export function ScanPanel() {
   /** A match was tapped: its page (to see prices and add it), or when scanning a stack, into the list. */
   function pick(card: CatalogCard) {
     if (!stack) return openCard(card.id);
-    scanList.add(listCardOf(card), defaultFields(card.variants ?? [], currency)); // tapping it was the yes
+    scanList.add(listCardOf(card), defaultFields(allPrintingsOf(card), currency)); // tapping it was the yes
     navigator.vibrate?.(40);
     scanAgain();
   }
@@ -578,7 +578,7 @@ function FindPrompt({
   const [choosing, setChoosing] = useState(false);
   const { card } = best;
   // Which printing this copy is (a reverse holo among holos), when the card comes in more than one
-  const printings = printingOrder(card.variants ?? []);
+  const printings = allPrintingsOf(card);
   const [printing, setPrinting] = useState(printings[0]);
   const n = owned(best);
   useEffect(() => {

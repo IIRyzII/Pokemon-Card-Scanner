@@ -1,6 +1,7 @@
 // Card cache, price refreshes, price history and item valuations.
 
 import { cardmarketRows, pricesOf, type CardmarketSetFile } from '../../shared/cardmarket.ts';
+import { isSpecialPrinting } from '../../shared/printings.ts';
 import type { CardInfo, PriceRefreshResponse, PriceRow } from '../../shared/types.ts';
 import { valueItem } from '../../shared/values.ts';
 import { toItem, toPrice, toSale } from './db.ts';
@@ -146,7 +147,14 @@ async function catalogCardmarket(env: Env, setId: string, cardId: string, budget
   if ('missing' in file) return { kind: 'tcgdex' };
   const entry = file.cards[cardId];
   if (entry === undefined) return { kind: 'tcgdex' };
-  return { kind: 'catalog', rows: entry === 0 ? [] : cardmarketRows(pricesOf(entry), file.updated) };
+  const rows = entry === 0 ? [] : cardmarketRows(pricesOf(entry), file.updated);
+  // Its special printings' own products ("card id|holo~cosmos"): one price each
+  for (const [key, special] of Object.entries(file.cards)) {
+    if (!key.startsWith(`${cardId}|`) || special === 0) continue;
+    const variant = key.slice(cardId.length + 1);
+    for (const row of cardmarketRows(pricesOf(special), file.updated)) if (row.variant === 'main') rows.push({ ...row, variant, label: 'Cardmarket' });
+  }
+  return { kind: 'catalog', rows };
 }
 
 /**
@@ -249,7 +257,9 @@ export async function ownedVariants(env: Env, cardId: string): Promise<string[]>
 export async function refreshCard(env: Env, cardId: string, extraVariants: string[] = [], budget?: Budget): Promise<void> {
   try {
     const { card } = await refreshMarketPrices(env, cardId, false, budget);
-    await refreshPriceCharting(env, card, [...(await ownedVariants(env, cardId)), ...extraVariants]);
+    // PriceCharting has the plain printings (a special one, a cosmos holo, isn't matched)
+    const plain = [...(await ownedVariants(env, cardId)), ...extraVariants].filter((v) => !isSpecialPrinting(v));
+    await refreshPriceCharting(env, card, plain);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await env.DB.prepare(

@@ -1,5 +1,6 @@
 import { CONDITION_LABELS, VARIANT_LABELS, gradeText, type Condition, type Variant } from '../../../shared/grading.ts';
 import { LANGUAGES, languageLabel, type Language } from '../../../shared/languages.ts';
+import { printingLabel } from '../../../shared/printings.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import type { CollectionItem } from '../../../shared/types.ts';
 import type { CatalogCard } from '../lib/catalog.ts';
@@ -7,7 +8,7 @@ import { useCurrency } from '../lib/currency.tsx';
 import { href } from '../lib/router.ts';
 import { CardImage } from './CardImage.tsx';
 
-export const variantLabel = (v: string) => VARIANT_LABELS[v as Variant] ?? v;
+export const variantLabel = (v: string) => VARIANT_LABELS[v as Variant] ?? printingLabel(v);
 export const conditionLabel = (c: string | null) => (c ? (CONDITION_LABELS[c as Condition] ?? c) : '');
 
 /** "PSA 10", "Raw · NM" */

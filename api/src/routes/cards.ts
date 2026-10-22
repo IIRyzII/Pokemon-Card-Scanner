@@ -15,7 +15,7 @@ import {
   refreshMarketPrices,
   refreshPriceCharting,
 } from '../prices.ts';
-import { cardId as parseCardId, oneOf, readJson, requiredText } from '../validate.ts';
+import { cardId as parseCardId, oneOf, printing, readJson, requiredText } from '../validate.ts';
 
 /** Most cards one /prices request can ask for (the want list of a few big binders). */
 const MAX_PRICE_CARDS = 1500;
@@ -119,7 +119,7 @@ cards.get('/:cardId', async (c) => {
 cards.post('/:cardId/refresh', requireRole('editor'), async (c) => {
   const cardId = parseCardId(c.req.param('cardId'));
   const body = await c.req.json().catch(() => ({}) as Record<string, unknown>);
-  const variant = oneOf((body as Record<string, unknown>).variant, VARIANTS, 'Printing', { optional: true });
+  const variant = printing((body as Record<string, unknown>).variant, 'Printing', { optional: true });
   await refreshCard(c.env, cardId, variant ? [variant] : []);
   return c.json(await cardDetail(c.env, cardId));
 });

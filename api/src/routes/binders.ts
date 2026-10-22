@@ -3,12 +3,11 @@
 
 import { Hono } from 'hono';
 import { BINDER_COLOUR_KEYS, MAX_COPIES, MAX_POCKETS, POCKET_SIZES } from '../../../shared/binders.ts';
-import { VARIANTS } from '../../../shared/grading.ts';
 import type { Binder, BinderCard } from '../../../shared/types.ts';
 import { authenticate, requireRole } from '../auth.ts';
 import { auditStmt } from '../db.ts';
 import { HttpError, nowIso, type AppEnv, type Env } from '../env.ts';
-import { cardId as parseCardId, number, oneOf, readJson, text } from '../validate.ts';
+import { cardId as parseCardId, number, oneOf, printing, readJson, text } from '../validate.ts';
 
 const binders = new Hono<AppEnv>();
 binders.use('*', authenticate, requireRole('viewer'));
@@ -32,7 +31,7 @@ function parseCards(v: unknown): BinderCard[] {
     const c = raw as Record<string, unknown>;
     return {
       cardId: parseCardId(c.cardId),
-      variant: oneOf(c.variant ?? 'normal', VARIANTS, 'Printing')!,
+      variant: printing(c.variant ?? 'normal', 'Printing')!,
       copies: number(c.copies ?? 1, 'Copies', { min: 1, max: MAX_COPIES, integer: true })!,
     };
   });

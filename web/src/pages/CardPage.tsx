@@ -8,7 +8,7 @@ import { gradeBadge, variantLabel } from '../components/CardTile.tsx';
 import { IconBack, IconHeart, IconPlus } from '../components/Icons.tsx';
 import { PriceSection } from '../components/PriceSection.tsx';
 import { WantSheet } from '../components/WantSheet.tsx';
-import { printingNote } from '../lib/binders.ts';
+import { allPrintingsOf, printingNote } from '../lib/binders.ts';
 import { useWants } from '../lib/wantsContext.tsx';
 import { api } from '../lib/api.ts';
 import { canonicalArtist } from '../lib/catalog.ts';
@@ -87,7 +87,7 @@ export function CardPage({ cardId }: { cardId: string }) {
                 .filter(Boolean)
                 .join(' · ')}
               <br />
-              Printings: {printingOrder(card.variants).map(variantLabel).join(', ')}
+              Printings: {(fromCatalog?.variants ? allPrintingsOf(fromCatalog) : printingOrder(card.variants)).map(variantLabel).join(', ')}
             </p>
           )}
 

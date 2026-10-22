@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { languageLabel } from '../../../shared/languages.ts';
 import { cardNumberText } from '../../../shared/links.ts';
+import { preferPrintings } from '../../../shared/printings.ts';
 import { hasRole, type CardDetailResponse, type CollectionItem, type ItemFields } from '../../../shared/types.ts';
 import { CardImage } from '../components/CardImage.tsx';
 import { conditionLabel, gradeBadge, variantLabel } from '../components/CardTile.tsx';
@@ -10,7 +11,8 @@ import { ItemForm } from '../components/ItemForm.tsx';
 import { PriceSection } from '../components/PriceSection.tsx';
 import { Sheet } from '../components/Sheet.tsx';
 import { api } from '../lib/api.ts';
-import { canonicalArtist } from '../lib/catalog.ts';
+import { allPrintingsOf } from '../lib/binders.ts';
+import { canonicalArtist, type CatalogCard } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
 import { relativeTime, shortDate } from '../lib/format.ts';
@@ -246,9 +248,14 @@ export function ItemPage({ id }: { id: string }) {
             </>
           }
         >
-          <ItemForm value={editing} onChange={setEditing} variants={detail?.card.variants ?? [item.variant]} />
+          <ItemForm value={editing} onChange={setEditing} variants={printingsFor(catalog?.byId.get(item.cardId), detail?.card.variants ?? [item.variant])} />
         </Sheet>
       )}
     </div>
   );
+}
+
+/** The printings to offer when editing a copy: the catalog's (special ones too), else the API's. */
+function printingsFor(card: CatalogCard | undefined, fallback: string[]): string[] {
+  return card?.variants ? preferPrintings(fallback, allPrintingsOf(card)) : fallback;
 }

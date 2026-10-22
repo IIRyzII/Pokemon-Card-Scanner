@@ -1,7 +1,7 @@
 // One binder as it is on the shelf, page by page: the cards you have in colour, the rest greyed
 // out, each pocket noting its printing. Or the list of what's still missing and where it goes.
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { BINDER_COLOURS, POCKET_LAYOUTS, colourOf, type Pockets } from '../../../shared/binders.ts';
 import { cardNumberText } from '../../../shared/links.ts';
 import type { Binder } from '../../../shared/types.ts';
@@ -13,6 +13,7 @@ import { api } from '../lib/api.ts';
 import {
   binderStats,
   fixBinderPrintings,
+  knownPrintings,
   missingOf,
   ownedPrintings,
   pagesOf,
@@ -53,7 +54,7 @@ export function BinderPage({ id }: { id: string }) {
   }, [id]);
 
   // Printings a card doesn't come in (saved before they were known) count as its main one.
-  const known = useCallback((cardId: string) => catalog?.byId.get(cardId)?.variants ?? null, [catalog]);
+  const known = useMemo(() => knownPrintings(catalog), [catalog]);
   const cards = useMemo(() => (binder ? fixBinderPrintings(binder.cards, known) : []), [binder, known]);
   const owned = useMemo(() => ownedPrintings(data?.items ?? [], known), [data, known]);
   const pockets = useMemo(() => pocketsOf(cards, owned), [cards, owned]);
@@ -189,7 +190,7 @@ export function BinderPage({ id }: { id: string }) {
                   </h2>
                   <div className="pockets" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
                     {page.map((p, j) => (
-                      <PocketView key={j} pocket={p} card={card(p.cardId)} promo={isPromoPrinting(promos, p.cardId, p.variant)} />
+                      <PocketView key={j} pocket={p} card={card(p.cardId)} promo={isPromoPrinting(promos, p.cardId, p.variant) || !!card(p.cardId)?.versionOf} />
                     ))}
                     {Array.from({ length: perPage - page.length }, (_, j) => (
                       <div key={`empty-${j}`} className="pocket spare" aria-hidden="true" />
@@ -222,7 +223,11 @@ function PocketView({ pocket, card, promo }: { pocket: Pocket; card: CatalogCard
     >
       <CardImage base={card?.image} name={name} setId={card?.set.id} number={card?.number} />
       <span className="pocket-note">
-        <span className="faint">#{card?.number ?? '?'}</span> {note}
+        {/* A stamped promo card from the promo set: "SVP #057", not the set's own #057 */}
+        <span className="faint">
+          {card?.versionOf && card.set.code ? `${card.set.code} ` : ''}#{card?.number ?? '?'}
+        </span>{' '}
+        {note}
       </span>
       <span className="sr-only">{pocket.filled ? 'You have it' : 'Missing'}</span>
     </a>

@@ -4,9 +4,11 @@ import { Hono } from 'hono';
 import { entryFor, planMerges } from '../../../shared/copies.ts';
 import { CURRENCIES, convert } from '../../../shared/currency.ts';
 import { DEFAULT_LANGUAGE, LANGUAGE_CODES } from '../../../shared/languages.ts';
-import { CONDITIONS, GRADERS, GRADE_LABELS, VARIANTS, isGrade } from '../../../shared/grading.ts';
+import { CONDITIONS, GRADERS, GRADE_LABELS, isGrade } from '../../../shared/grading.ts';
+import { basePrinting } from '../../../shared/printings.ts';
 import {
   hasRole,
+  type CardInfo,
   type CollectionResponse,
   type ItemFields,
   type MergeResponse,
@@ -25,7 +27,10 @@ import {
   refreshPriceCharting,
   refreshStalePrices,
 } from '../prices.ts';
-import { cardId as parseCardId, isoDate, number, oneOf, readJson, text } from '../validate.ts';
+import { cardId as parseCardId, isoDate, number, oneOf, printing, readJson, text } from '../validate.ts';
+
+/** TCGdex's printing flags only have the plain printings: a special one (a cosmos holo) is built on one the card comes in. */
+const comesIn = (card: CardInfo, variant: string) => card.variants.includes(basePrinting(variant));
 
 const collection = new Hono<AppEnv>();
 collection.use('*', authenticate, requireRole('viewer'));
@@ -33,7 +38,7 @@ collection.use('*', authenticate, requireRole('viewer'));
 /** Validates item fields; for updates, missing fields keep their current values. */
 function parseItemFields(body: Record<string, unknown>, home: string, current?: ItemFields): ItemFields {
   const pick = (k: keyof ItemFields) => (k in body ? body[k] : current?.[k]);
-  const variant = oneOf(pick('variant') ?? 'normal', VARIANTS, 'Printing')!;
+  const variant = printing(pick('variant') ?? 'normal', 'Printing')!;
   const grader = oneOf(pick('grader') ?? 'RAW', GRADERS, 'Grader')!;
   const graded = grader !== 'RAW';
   let grade: number | null = null;
@@ -147,7 +152,7 @@ collection.post('/', requireRole('editor'), async (c) => {
   const cardId = parseCardId(body.cardId);
   const fields = parseItemFields(body, homeCurrency(c.env));
   const card = await getCard(c.env, cardId);
-  if (!card.variants.includes(fields.variant)) {
+  if (!comesIn(card, fields.variant)) {
     throw new HttpError(400, `${card.name} (${card.setName}) doesn't come in that printing`);
   }
   const user = c.get('user');
@@ -225,7 +230,7 @@ collection.patch('/:id', requireRole('editor'), async (c) => {
   const fields = parseItemFields(await readJson(c.req.raw), homeCurrency(c.env), item);
   if (fields.variant !== item.variant) {
     const card = await getCard(c.env, item.cardId);
-    if (!card.variants.includes(fields.variant)) throw new HttpError(400, "This card doesn't come in that printing");
+    if (!comesIn(card, fields.variant)) throw new HttpError(400, "This card doesn't come in that printing");
   }
   const changes = Object.fromEntries(
     Object.entries(fields).filter(([k, v]) => item[k as keyof ItemFields] !== v),

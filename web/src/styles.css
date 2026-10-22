@@ -1475,13 +1475,16 @@ button.tile.as-button {
   border: 1px dashed var(--border);
   border-radius: 4.5% / 3.2%;
 }
+/* Up to 3 lines: special printings have long names ("Cosmos Holo · Snowflake stamp · promo") */
 .pocket-note {
+  display: -webkit-box;
   overflow: hidden;
   font-size: 0.68rem;
   line-height: 1.25;
   text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 .pocket.filled .pocket-note {
   font-weight: 700;

@@ -3,7 +3,6 @@
 
 import { Hono } from 'hono';
 import { CURRENCIES } from '../../../shared/currency.ts';
-import { VARIANTS } from '../../../shared/grading.ts';
 import type { Want } from '../../../shared/types.ts';
 import { DEFAULT_PRIORITY, MAX_WANT_QUANTITY, PRIORITY_VALUES } from '../../../shared/wants.ts';
 import { authenticate, requireRole } from '../auth.ts';
@@ -11,7 +10,7 @@ import { auditStmt } from '../db.ts';
 import { HttpError, nowIso, type AppEnv, type Env } from '../env.ts';
 import { homeCurrency } from '../fx.ts';
 import { pricesAreStale, refreshMarketPrices } from '../prices.ts';
-import { cardId as parseCardId, number, oneOf, readJson, text } from '../validate.ts';
+import { cardId as parseCardId, number, oneOf, printing, readJson, text } from '../validate.ts';
 
 const wants = new Hono<AppEnv>();
 wants.use('*', authenticate, requireRole('viewer'));
@@ -65,7 +64,7 @@ wants.get('/', async (c) => {
 wants.post('/', requireRole('editor'), async (c) => {
   const body = await readJson(c.req.raw);
   const cardId = parseCardId(body.cardId);
-  const variant = oneOf(body.variant ?? 'normal', VARIANTS, 'Printing')!;
+  const variant = printing(body.variant ?? 'normal', 'Printing')!;
   const row = await c.env.DB.prepare('SELECT * FROM wants WHERE card_id = ? AND variant = ?').bind(cardId, variant).first<Row>();
   const current = row ? toWant(row) : undefined;
   const w = parseWant(c.env, body, current);

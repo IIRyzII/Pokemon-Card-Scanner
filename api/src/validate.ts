@@ -1,3 +1,4 @@
+import { isPrintingKey } from '../../shared/printings.ts';
 import { HttpError } from './env.ts';
 
 type Opts = { optional?: boolean };
@@ -54,6 +55,16 @@ export function oneOf<T extends string>(v: unknown, allowed: readonly T[], field
     throw new HttpError(400, `${field} must be one of: ${allowed.join(', ')}`);
   }
   return v as T;
+}
+
+/** A printing: one of the five plain ones, or a special one built on one ("holo~cosmos", "reverse+gamestop"). */
+export function printing(v: unknown, field: string, opts: Opts = {}): string | null {
+  if (v === undefined || v === null || v === '') {
+    if (opts.optional) return null;
+    throw new HttpError(400, `${field} is required`);
+  }
+  if (!isPrintingKey(v)) throw new HttpError(400, `${field} isn't a printing this app knows`);
+  return v;
 }
 
 export function isoDate(v: unknown, field: string, opts: Opts = {}): string | null {

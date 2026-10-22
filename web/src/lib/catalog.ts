@@ -30,6 +30,12 @@ export interface CatalogCard {
   hp: number | null;
   /** Printings it comes in (VARIANTS order), null when the catalog doesn't say */
   variants: Variant[] | null;
+  /** Special printings it comes in: a foil or stamps ("holo~cosmos", "reverse+gamestop") */
+  specials: string[];
+  /** Its printings (plain or special) only promos come in, not its set's packs; null: a catalog from before they were known */
+  promos: readonly string[] | null;
+  /** For a stamped promo-set card (a Build & Battle promo): the set card it's a version of */
+  versionOf: string | null;
   /** Base image URL (append /low.webp or /high.webp), null when no scan exists */
   image: string | null;
   nameKey: string;
@@ -65,8 +71,10 @@ export interface CatalogJson {
   rarities: string[];
   categories: string[];
   imageOverrides: Record<string, string>;
-  /** …, hp, printings as bits in VARIANTS order (left out by catalogs built before binders) */
-  cards: [string, string, string, number, number, number, number, number, number?, number?][];
+  /** …, hp, printings as bits in VARIANTS order (left out by catalogs built before binders), special printings, promo printings, the set card a stamped promo is a version of */
+  cards: [string, string, string, number, number, number, number, number, number?, number?, (string[] | 0)?, (string[] | 0)?, (string | 0)?][];
+  /** 1: promo printings are in the rows (else the app works them out) */
+  printings?: number;
 }
 
 /** "Farfetch'd" → "farfetchd", "Flabébé" → "flabebe", "Mr. Mime" → "mr mime" */
@@ -108,7 +116,7 @@ export function buildCatalog(json: CatalogJson): Catalog {
   const bySet = new Map<string, CatalogCard[]>();
   const artistCards = new Map<string, CatalogCard[]>();
 
-  json.cards.forEach(([id, name, number, setIdx, artistIdx, rarityIdx, categoryIdx, hasImage, hp, variantBits], order) => {
+  json.cards.forEach(([id, name, number, setIdx, artistIdx, rarityIdx, categoryIdx, hasImage, hp, variantBits, specials, promos, versionOf], order) => {
     const set = sets[setIdx];
     const nameKey = normName(name);
     const card: CatalogCard = {
@@ -121,6 +129,9 @@ export function buildCatalog(json: CatalogJson): Catalog {
       category: categoryIdx >= 0 ? json.categories[categoryIdx] : null,
       hp: hp || null,
       variants: variantBits ? VARIANTS.filter((_, bit) => variantBits & (1 << bit)) : null,
+      specials: specials || [],
+      promos: json.printings === 1 ? promos || [] : null,
+      versionOf: versionOf || null,
       image: json.imageOverrides[id] ?? (hasImage ? `${json.imageBase}/${set.serie}/${set.id}/${number}` : null),
       nameKey,
       nameWords: nameKey.split(' ').filter(Boolean),

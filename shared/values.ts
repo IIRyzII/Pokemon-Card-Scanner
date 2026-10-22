@@ -5,6 +5,7 @@
 
 import { convert, type FxRates } from './currency.ts';
 import { PRICE_GRADE_LABELS, gradeText, priceGradeKey } from './grading.ts';
+import { basePrinting, isSpecialPrinting } from './printings.ts';
 
 export interface PriceRow {
   source: 'tcgplayer' | 'cardmarket' | 'pricecharting';
@@ -104,8 +105,12 @@ function daysAgo(isoDate: string, now: Date): number {
   return (now.getTime() - new Date(`${isoDate.slice(0, 10)}T00:00:00Z`).getTime()) / 86_400_000;
 }
 
-/** Cardmarket reports a main price and a "holo" price (the reverse holo for modern cards). */
+/**
+ * Cardmarket reports a main price and a "holo" price (the reverse holo for modern cards); a special
+ * printing (a cosmos holo, a stamped version) is a product of its own, with a row of its own.
+ */
 function cardmarketVariant(variant: string): string | null {
+  if (isSpecialPrinting(variant)) return variant;
   if (variant === 'reverse') return 'holo';
   if (variant === 'firstEdition') return null; // Cardmarket's top-level price is the unlimited print
   return 'main';
@@ -145,6 +150,12 @@ export function valueItem(item: ItemLike, prices: PriceRow[], sales: SaleRow[], 
         english ? 'TCGplayer market price' : 'TCGplayer market price (English copies)',
       );
     const priceCharting = () => fromRow(pcRow('ungraded'), 'pricecharting', 'PriceCharting ungraded');
+    // A special printing with no price of its own yet: its plain printing's, said so.
+    const plainPrinting = (): Valuation | null => {
+      if (!isSpecialPrinting(item.variant)) return null;
+      const plain = valueItem({ ...item, variant: basePrinting(item.variant) }, prices, sales, ctx, now);
+      return plain.unit === null ? null : { ...plain, detail: `${plain.detail}, for its plain printing (none for this one yet)` };
+    };
     const cardmarket = () =>
       fromRow(
         cmVariant ? prices.find((p) => p.source === 'cardmarket' && p.variant === cmVariant && p.market != null) : undefined,
@@ -156,6 +167,7 @@ export function valueItem(item: ItemLike, prices: PriceRow[], sales: SaleRow[], 
     return (
       (english ? (tcgplayer() ?? priceCharting() ?? cardmarket()) : (cardmarket() ?? tcgplayer() ?? priceCharting())) ??
       (sold.length ? fromSales(recentSold.length ? recentSold : sold) : null) ??
+      plainPrinting() ??
       result(null, null, 'No raw price yet')
     );
   }

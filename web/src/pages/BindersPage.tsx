@@ -1,7 +1,7 @@
 // Your real binders, on a shelf (or as a list) with how full each is and what it's worth, and
 // making a new one from a set or a Pokémon.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BINDER_COLOURS,
   MAX_COPIES,
@@ -22,11 +22,14 @@ import { useFeedback } from '../components/feedback.tsx';
 import { Sheet } from '../components/Sheet.tsx';
 import { api } from '../lib/api.ts';
 import {
+  allPrintingsOf,
   binderCards,
   promosOf,
+  stampedPromosOf,
   type PrintingChoice,
   binderStats,
   fixBinderPrintings,
+  knownPrintings,
   ownedPrintings,
   percentFilled,
   pocketsOf,
@@ -72,7 +75,7 @@ export function BindersPage() {
   const [arranging, setArranging] = useState(false);
   const { toast } = useFeedback();
   const canEdit = hasRole(user?.role, 'editor');
-  const known = useCallback((cardId: string) => catalog?.byId.get(cardId)?.variants ?? null, [catalog]);
+  const known = useMemo(() => knownPrintings(catalog), [catalog]);
   const owned = useMemo(() => ownedPrintings(data?.items ?? [], known), [data, known]);
   const money = (v: number) => format(v, currency, { round: true });
 
@@ -243,8 +246,10 @@ function NewBinder({ shelf, onClose }: { shelf: Binder[]; onClose: () => void })
   }, [catalog, kind, setId, pokemon]);
   // Printings only promos come in (a common's blister-pack holo): left out, or last in a grand master set.
   const promos = useMemo(() => (catalog ? promosOf(catalog, picked) : new Set<string>()), [catalog, picked]);
-  const cards = useMemo(() => binderCards(picked, printings, copies, promos), [picked, printings, copies, promos]);
-  const promoCount = picked.reduce((n, c) => n + (c.variants ?? []).filter((v) => promos.has(`${c.id}|${v}`)).length, 0);
+  // …and the set's stamped promo cards (its Build & Battle and prerelease promos), last of all.
+  const stamped = useMemo(() => (catalog && kind === 'set' ? stampedPromosOf(catalog, picked) : []), [catalog, kind, picked]);
+  const cards = useMemo(() => binderCards(picked, printings, copies, promos, stamped), [picked, printings, copies, promos, stamped]);
+  const promoCount = picked.reduce((n, c) => n + allPrintingsOf(c).filter((v) => promos.has(`${c.id}|${v}`)).length, 0);
   const total = cards.reduce((n, c) => n + c.copies, 0);
   const set = catalog?.sets.find((s) => s.id === setId);
   const suggested =
@@ -349,7 +354,7 @@ function NewBinder({ shelf, onClose }: { shelf: Binder[]; onClose: () => void })
                   ? 'Each card in its main printing (regular, or holo for holo rares).'
                   : printings === 'master'
                     ? 'A master set: each card in every printing from the packs (regular, reverse holo, holo…), side by side. Promo printings are left out.'
-                    : `A grand master set: the master set, then the promo printings at the end: holos of commons from blister packs and boxes, stamped and theme-deck versions${promoCount ? ` (${promoCount} here)` : ' (none here)'}.`}
+                    : `A grand master set: the master set, then the promo versions at the end (cosmos holos from blister packs and boxes, stamped and theme-deck versions: ${promoCount} here), then ${stamped.length ? `the set's ${stamped.length} stamped promo cards (Build & Battle, prerelease)` : 'its stamped promo cards (none here)'}.`}
               </p>
             </fieldset>
             <label>

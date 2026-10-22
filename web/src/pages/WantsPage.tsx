@@ -14,7 +14,7 @@ import { ProgressBar } from '../components/ProgressBar.tsx';
 import { TiltCard } from '../components/TiltCard.tsx';
 import { PRIORITY_STARS, WantSheet } from '../components/WantSheet.tsx';
 import { api } from '../lib/api.ts';
-import { ownedPrintings, printingNote } from '../lib/binders.ts';
+import { knownPrintings, ownedPrintings, printingNote } from '../lib/binders.ts';
 import { normName, type CatalogCard } from '../lib/catalog.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
@@ -113,7 +113,7 @@ export function WantsPage() {
     );
   }, []);
 
-  const known = useCallback((cardId: string) => catalog?.byId.get(cardId)?.variants ?? null, [catalog]);
+  const known = useMemo(() => knownPrintings(catalog), [catalog]);
   const owned = useMemo(() => ownedPrintings(data?.items ?? [], known), [data, known]);
   const ready = !!(catalog && data && wants && binders);
   const { entries, got } = useMemo(

@@ -13,6 +13,7 @@ import { IconScan, IconTrash } from '../components/Icons.tsx';
 import { ItemForm } from '../components/ItemForm.tsx';
 import { Sheet } from '../components/Sheet.tsx';
 import { api } from '../lib/api.ts';
+import { allPrintingsOf } from '../lib/binders.ts';
 import { ownedCount, useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
 import { money } from '../lib/format.ts';
@@ -50,7 +51,8 @@ export function ScanListPanel() {
       if (!id) return;
       try {
         const detail = await api.card(id);
-        scanList.setVariants(id, preferPrintings(detail.card.variants, catalogRef.current?.byId.get(id)?.variants));
+        const known = catalogRef.current?.byId.get(id);
+        scanList.setVariants(id, preferPrintings(detail.card.variants, known?.variants ? allPrintingsOf(known) : null));
         setDetails((m) => new Map(m).set(id, detail));
       } catch {
         setUnreachable((s) => new Set(s).add(id));
@@ -81,8 +83,8 @@ export function ScanListPanel() {
   const splittingEntry = splitting ? list.find((e) => e.key === splitting) : undefined;
   /** The printings an entry can be split into: the catalog's (known or worked out), else the API's. */
   const printingsOf = (e: ListEntry) => {
-    const known = catalog?.byId.get(e.card.id)?.variants;
-    const all = printingOrder(known?.length ? known : (e.variants ?? []));
+    const known = catalog?.byId.get(e.card.id);
+    const all = known?.variants?.length ? allPrintingsOf(known) : printingOrder(e.variants ?? []);
     return all.includes(e.fields.variant) ? all : [e.fields.variant, ...all];
   };
 

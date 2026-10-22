@@ -9,6 +9,7 @@ import { cardNumberText } from '../../../shared/links.ts';
 import type { CardDetailResponse, CardInfo, ItemFields } from '../../../shared/types.ts';
 import { valueItem } from '../../../shared/values.ts';
 import { api } from '../lib/api.ts';
+import { allPrintingsOf } from '../lib/binders.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { useCurrency } from '../lib/currency.tsx';
 import { useCatalog } from '../lib/useCatalog.ts';
@@ -34,7 +35,8 @@ export function AddToCollection({ card, detail, onClose, variant, onAdded }: Pro
   const { ctx, currency } = useCurrency();
   const { catalog } = useCatalog();
   // The catalog knows (or has worked out) printings TCGdex doesn't: its best guess comes first.
-  const printings = preferPrintings(card.variants, catalog?.byId.get(card.id)?.variants);
+  const known = catalog?.byId.get(card.id);
+  const printings = preferPrintings(card.variants, known?.variants ? allPrintingsOf(known) : null);
   const [step, setStep] = useState<'details' | 'confirm'>('details');
   const [fields, setFields] = useState<ItemFields>(() => {
     const start = defaultFields(printings, currency);

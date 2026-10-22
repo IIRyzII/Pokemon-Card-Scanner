@@ -1,7 +1,7 @@
 // Binders: every pocket in order, page by page, and which ones the collection fills.
 
 import type { Variant } from '../../../shared/grading.ts';
-import { fixPrinting, printingOrder } from '../../../shared/printings.ts';
+import { fixPrinting, printingLabel, printingOrder } from '../../../shared/printings.ts';
 import type { BinderCard, CollectionItem } from '../../../shared/types.ts';
 import { normName, type Catalog, type CatalogCard, type CatalogSet } from './catalog.ts';
 
@@ -13,7 +13,7 @@ export const PRINTING_NOTES: Record<string, string> = {
   firstEdition: '1st Edition',
   wPromo: 'Promo stamp',
 };
-export const printingNote = (variant: string) => PRINTING_NOTES[variant] ?? variant;
+export const printingNote = (variant: string) => PRINTING_NOTES[variant] ?? printingLabel(variant);
 
 export interface Pocket {
   cardId: string;
@@ -155,16 +155,37 @@ const PROMO_AMONG = 8;
 export const isPromoSet = (set: Pick<CatalogSet, 'name'>) => /promo/i.test(set.name);
 
 /**
- * The printings (card id | printing) a set's cards come in only as promos, not in the set's own
- * packs: Paradox Rift's Snorunt as a cosmos holo from a blister pack, Silver Tempest's holo-rare
- * Dragonite without its holo (a stamped theme-deck card), Obsidian Flames' holo Charmander. Going
- * by the set itself: a printing that hardly any card of the same rarity comes in (under 15% of 8
- * or more), which finds Obsidian Flames' 14 blister and box holos. A card's only printing is
- * never a promo here.
+ * Every printing a card comes in: its plain ones (Reverse Holo before Holo when those are all), then
+ * its special ones (a cosmos holo, a stamped version), as the catalog has them.
+ */
+export function allPrintingsOf(card: Pick<CatalogCard, 'variants'> & Partial<Pick<CatalogCard, 'specials'>>): string[] {
+  return printingOrder([...(card.variants?.length ? card.variants : ['normal']), ...(card.specials ?? [])]);
+}
+
+/** Every printing of a card by id, for fixing printings recorded before they were known. */
+export const knownPrintings =
+  (catalog: Pick<Catalog, 'byId'> | null): KnownPrintings =>
+  (cardId) => {
+    const card = catalog?.byId.get(cardId);
+    return card?.variants ? allPrintingsOf(card) : null;
+  };
+
+/**
+ * The printings (card id | printing) a set's cards come in only as promos, not the set's own
+ * packs: Paradox Rift's Kingdra as a cosmos holo, its Snorunt as a cosmos holo with a snowflake
+ * stamp, its Iron Moth reverse holo stamped for GameStop. The catalog has them from TCGdex's
+ * details (shared/printings.ts); a catalog from before that has them worked out from the plain
+ * printings: one that hardly any card of the same rarity comes in (under 15% of 8 or more). A
+ * card's only printing is never a promo.
  */
 export function promoPrintings(setCards: readonly CatalogCard[]): Set<string> {
   const promos = new Set<string>();
-  if (!setCards.length || isPromoSet(setCards[0].set)) return promos;
+  if (!setCards.length) return promos;
+  if (setCards.every((c) => c.promos)) {
+    for (const c of setCards) for (const p of c.promos!) promos.add(key(c.id, p));
+    return promos;
+  }
+  if (isPromoSet(setCards[0].set)) return promos;
   const byRarity = new Map<string, CatalogCard[]>();
   for (const c of setCards) {
     if (!c.variants?.length) continue;
@@ -193,30 +214,58 @@ export function promosOf(catalog: Pick<Catalog, 'bySet'>, cards: readonly Pick<C
 export const isPromoPrinting = (promos: ReadonlySet<string>, cardId: string, variant: string) => promos.has(key(cardId, variant));
 
 /**
- * The printings a binder starts with for a card, from the set's own packs: its main one (as adding
- * a card does), or all of them. `promos`: printings only promos come in (promoPrintings).
+ * Stamped promo-set cards that are versions of these cards (a set's Build & Battle and prerelease
+ * promos: SVP 057 Chi-Yu, stamped with Paradox Rift's logo), in the promo set's order.
  */
-export function printingsOf(card: Pick<CatalogCard, 'id' | 'variants'>, every: boolean, promos?: ReadonlySet<string>): string[] {
-  const all = card.variants?.length ? card.variants : ['normal'];
+export function stampedPromosOf(catalog: Pick<Catalog, 'cards'>, cards: readonly Pick<CatalogCard, 'id'>[]): CatalogCard[] {
+  const ids = new Set(cards.map((c) => c.id));
+  return catalog.cards.filter((c) => c.versionOf && ids.has(c.versionOf));
+}
+
+/**
+ * The printings a binder starts with for a card, from the set's own packs: its main one (as adding
+ * a card does: a plain one), or all of them (special pack ones too, like Poké Ball reverse holos).
+ * `promos`: printings only promos come in (promoPrintings).
+ */
+export function printingsOf(
+  card: Pick<CatalogCard, 'id' | 'variants'> & Partial<Pick<CatalogCard, 'specials'>>,
+  every: boolean,
+  promos?: ReadonlySet<string>,
+): string[] {
+  const all = allPrintingsOf(card);
   const own = promos ? all.filter((v) => !promos.has(key(card.id, v))) : all;
   const printings = own.length ? own : all;
-  return every ? printingOrder(printings) : [printings[0]];
+  if (every) return printings;
+  // The main one: its first plain printing from the packs (VARIANTS order: holo before reverse)
+  const plain = (card.variants?.length ? card.variants : ['normal']).filter((v) => printings.includes(v));
+  return [plain[0] ?? printings[0]];
 }
 
 /**
  * How many printings a binder made from cards has: one of each card, a master set (every printing
- * from the set's own packs), or a grand master set (the master set, then the promo printings).
+ * from the set's own packs), or a grand master set (the master set, then the promo printings, then
+ * the set's stamped promo cards).
  */
 export type PrintingChoice = 'one' | 'master' | 'grand';
 
-/** Binder cards for catalog cards, in their order, `copies` of each printing; a grand master set's promos last. */
-export function binderCards(cards: CatalogCard[], choice: PrintingChoice, copies: number, promos: ReadonlySet<string> = new Set()): BinderCard[] {
+/**
+ * Binder cards for catalog cards, in their order, `copies` of each printing. A grand master set has
+ * the promo printings last, then `stamped` promo cards (stampedPromosOf) in every printing.
+ */
+export function binderCards(
+  cards: CatalogCard[],
+  choice: PrintingChoice,
+  copies: number,
+  promos: ReadonlySet<string> = new Set(),
+  stamped: readonly CatalogCard[] = [],
+): BinderCard[] {
   const line = (cardId: string, variant: string): BinderCard => ({ cardId, variant, copies });
   const main = cards.flatMap((card) => printingsOf(card, choice !== 'one', promos).map((v) => line(card.id, v)));
   if (choice !== 'grand') return main;
   const inMain = new Set(main.map((c) => key(c.cardId, c.variant)));
-  const extra = cards.flatMap((card) => (card.variants ?? []).filter((v) => promos.has(key(card.id, v)) && !inMain.has(key(card.id, v))).map((v) => line(card.id, v)));
-  return [...main, ...extra];
+  const extra = cards.flatMap((card) => allPrintingsOf(card).filter((v) => promos.has(key(card.id, v)) && !inMain.has(key(card.id, v))).map((v) => line(card.id, v)));
+  const promoCards = stamped.flatMap((card) => allPrintingsOf(card).map((v) => line(card.id, v)));
+  return [...main, ...extra, ...promoCards];
 }
 
 /** Every card in a set, in number order. */

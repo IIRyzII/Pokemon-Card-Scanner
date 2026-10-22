@@ -14,6 +14,11 @@
 // plain Rayquaza), so every card's link is checked against its name and attacks and corrected
 // (shared/cardmarket.ts). They're published per set (cardmarket/<set>.json) for the API.
 //
+// And every card's exact printings from TCGdex's details: its special ones too (a cosmos holo from
+// a blister pack, a set-logo or store stamp), which of them are promos rather than in the set's
+// packs, and which stamped promo-set cards are versions of a set's own (SVP 057 Chi-Yu, Paradox
+// Rift's Build & Battle promo): what a grand master set binder is made of (shared/printings.ts).
+//
 // Usage: node --experimental-strip-types scripts/build-catalog.mjs [--out web/public/catalog] [--if-missing] [--fallback-url https://you.github.io/repo/catalog] [--prices-max-age-days 6]
 //   --if-missing:   do nothing when a catalog already exists (used by `npm run dev`).
 //   --fallback-url: the published catalog: prints and recent prices are reused from it, and if
@@ -27,8 +32,8 @@ import path from 'node:path';
 import jpeg from 'jpeg-js';
 import { cardPrint, PRINT_SPEC, PRINT_WORDS } from '../shared/cardprint.ts';
 import { VARIANTS } from '../shared/grading.ts';
-import { inferPrintings } from '../shared/printings.ts';
-import { cardmarketIndex, cardmarketPrices, cardmarketRows, entryOf, linkSet, pricesOf } from '../shared/cardmarket.ts';
+import { cardPrintings, inferPrintings, isSpecialPrinting, parsePrinting, printingKey, setPromoPrintings, stampedPromoLinks } from '../shared/printings.ts';
+import { cardmarketIndex, cardmarketName, cardmarketPrices, cardmarketRows, entryOf, linkSet, pricesOf, productParts } from '../shared/cardmarket.ts';
 import { extractPrices, reportedSources, standardPrice } from '../shared/market.ts';
 
 const API = 'https://api.tcgdex.net/v2/en';
@@ -377,9 +382,10 @@ async function previousPrices() {
 }
 
 /**
- * Each card's TCGdex link to Cardmarket and its attacks, from an earlier build: card id →
- * [TCGdex's product or null, "attack|attack", our entry], or null. (Only cards fetched again
- * get them afresh.)
+ * Each card's TCGdex link to Cardmarket, its attacks and its detailed printings, from an earlier
+ * build: card id → [TCGdex's product or null, "attack|attack", our entry, [[printing, Cardmarket
+ * product (0: none, null: not fetched yet)]…], { special printing: entry }], or null. (Only cards
+ * fetched again get them afresh.)
  */
 async function previousCardmarket() {
   for (const read of earlierSources()) {
@@ -394,6 +400,62 @@ async function previousCardmarket() {
 }
 
 /**
+ * A card's printings in detail: [printing, its own Cardmarket product (0: none; null: not known,
+ * fetched from TCGdex's GraphQL API, which doesn't have them)]. Jumbo cards are left out: they
+ * don't go in a binder.
+ */
+const detailedPrintings = (list, withProducts) =>
+  (list ?? [])
+    .filter((v) => v?.type && (!v.size || v.size === 'standard'))
+    .map((v) => [printingKey(v), !withProducts ? null : typeof v.thirdParty?.cardmarket === 'number' ? v.thirdParty.cardmarket : 0]);
+
+/** How much of a card the builds have fetched: 0 nothing, 1 its printings (GraphQL), 2 all of it. */
+const fetchedLevel = (link) => (!link?.printings ? 0 : link.printings.some(([, cm]) => cm === null) ? 1 : 2);
+
+/**
+ * The detailed printings and attacks of the cards earlier builds haven't fetched, from TCGdex's
+ * GraphQL API, 100 cards a request, so every card has them from the first build (a card at a
+ * time, below, TCGdex stops answering after a few thousand). It doesn't have each printing's
+ * Cardmarket product: those cards are fetched again a card at a time, as TCGdex allows.
+ */
+async function fetchPrintings(catalog, links) {
+  const ids = catalog.cards.map((row) => row[0]).filter((id) => !links.get(id)?.printings);
+  if (!ids.length) return;
+  console.log(`Fetching the printings of ${ids.length} cards…`);
+  let fetched = 0;
+  let failed = 0;
+  let failedInARow = 0;
+  const fetchBatch = async (batch) => {
+    if (failedInARow >= 4) {
+      failed += batch.length; // TCGdex isn't answering
+      return;
+    }
+    try {
+      const data = await graphql(
+        `{ ${batch.map((id, i) => `c${i}: card(id: ${JSON.stringify(id)}) { id variants_detailed { type foil stamp size } attacks { name } abilities { name } }`).join(' ')} }`,
+      );
+      failedInARow = 0;
+      for (const card of Object.values(data ?? {})) {
+        if (!card?.id) continue;
+        const moves = [...(card.attacks ?? []), ...(card.abilities ?? [])].map((m) => m?.name).filter(Boolean);
+        const link = links.get(card.id);
+        links.set(card.id, { hint: link?.hint ?? null, moves: moves.length ? moves : (link?.moves ?? []), printings: detailedPrintings(card.variants_detailed, false) });
+        fetched++;
+      }
+    } catch {
+      failedInARow++;
+      // One card TCGdex can't answer for fails its whole request: try each half
+      if (batch.length <= 10) failed += batch.length;
+      else for (const half of [batch.slice(0, batch.length / 2), batch.slice(batch.length / 2)]) await fetchBatch(half);
+    }
+  };
+  const batches = [];
+  for (let i = 0; i < ids.length; i += 100) batches.push(ids.slice(i, i + 100));
+  await pool(batches, 4, fetchBatch);
+  console.log(`  ${fetched} cards' printings fetched${failed ? `; ${failed} cards' couldn't be (the next build tries again)` : ''}`);
+}
+
+/**
  * The market price of one raw copy of every card's standard printing (TCGplayer USD, else
  * Cardmarket EUR), in catalog order: what set values add up. TCGdex only has prices per card, so
  * a full refresh is one small request per card; it's skipped while the last one is recent.
@@ -405,8 +467,13 @@ async function buildPrices(catalog) {
   const n = catalog.cards.length;
   const usd = new Array(n).fill(null);
   const eur = new Array(n).fill(null);
-  /** card id → { hint: TCGdex's Cardmarket product, moves: attack names } */
+  /** card id → { hint: TCGdex's Cardmarket product, moves: attack names, printings: detailedPrintings } */
   const links = new Map();
+  for (const row of catalog.cards) {
+    const link = earlierLinks?.byId.get(row[0]);
+    if (link) links.set(row[0], { hint: link[0], moves: link[1] ? link[1].split('|') : [], printings: Array.isArray(link[3]) ? link[3] : null });
+  }
+  await fetchPrintings(catalog, links);
   const todo = [];
   catalog.cards.forEach((row, i) => {
     const old = earlier?.byId.get(row[0]);
@@ -414,13 +481,13 @@ async function buildPrices(catalog) {
       usd[i] = old.usd;
       eur[i] = old.eur;
     }
-    const link = earlierLinks?.byId.get(row[0]);
-    if (link) links.set(row[0], { hint: link[0], moves: link[1] ? link[1].split('|') : [] });
-    if (!recent || !old || !link) todo.push(i);
+    if (!recent || !old || fetchedLevel(links.get(row[0])) < 2) todo.push(i);
   });
-  // Cards without a Cardmarket link yet go first: when TCGdex stops answering part way (it does),
-  // the next build carries on from where this one stopped rather than from the oldest sets again.
-  todo.sort((a, b) => Number(links.has(catalog.cards[a][0])) - Number(links.has(catalog.cards[b][0])) || a - b);
+  // Cards fetched least go first (nothing yet, then only their printings): when TCGdex stops
+  // answering part way (it does), the next build carries on from where this one stopped, not from
+  // the oldest sets again.
+  const level = (i) => fetchedLevel(links.get(catalog.cards[i][0]));
+  todo.sort((a, b) => level(a) - level(b) || a - b);
   console.log(`Fetching market prices for ${todo.length} cards${recent ? ` (the rest are from ${earlier.updated.slice(0, 10)})` : ''}…`);
   const now = new Date().toISOString();
   let failedInARow = 0;
@@ -443,7 +510,7 @@ async function buildPrices(catalog) {
       if (!raw) return;
       const moves = [...(raw.attacks ?? []), ...(raw.abilities ?? [])].map((m) => m?.name).filter(Boolean);
       const hint = raw.pricing?.cardmarket?.idProduct ?? links.get(id)?.hint ?? null;
-      links.set(id, { hint: typeof hint === 'number' ? hint : null, moves });
+      links.set(id, { hint: typeof hint === 'number' ? hint : null, moves, printings: detailedPrintings(raw.variants_detailed, true) });
       // TCGdex leaves TCGplayer's prices out of some responses: ask again before taking Cardmarket's,
       // and keep the TCGplayer price from last time rather than switching sources.
       for (let again = 0; again < 2 && !reportedSources(raw).includes('tcgplayer'); again++) {
@@ -488,7 +555,10 @@ async function buildCardmarket(catalog, links, earlierLinks) {
     console.warn(`Cardmarket's product list or price guide couldn't be fetched (${err.message})`);
     if (!earlierLinks) return null;
     console.warn(`  kept the earlier build's Cardmarket prices (from ${earlierLinks.updated.slice(0, 10)})`);
-    return { updated: earlierLinks.updated, cards: Object.fromEntries(earlierLinks.byId) };
+    const cards = Object.fromEntries(earlierLinks.byId);
+    // …with the printings fetched this time
+    for (const [id, link] of links) if (cards[id] && link.printings) cards[id] = [cards[id][0], cards[id][1], cards[id][2], link.printings, cards[id][4] ?? 0];
+    return { updated: earlierLinks.updated, cards };
   }
   const index = cardmarketIndex(products.products);
   const priceOf = new Map(guide.priceGuides.map((g) => [g.idProduct, g]));
@@ -501,20 +571,91 @@ async function buildCardmarket(catalog, links, earlierLinks) {
   }
   const cards = {};
   const tally = { checked: 0, corrected: 0, guessed: 0, none: 0 };
+  let specialPrices = 0;
   for (const list of bySet.values()) {
+    const nameOf = new Map(list.map((c) => [c.id, cardmarketName(c.name)]));
     for (const [id, { product, how }] of linkSet(index, list)) {
       tally[how]++;
       const link = links.get(id);
       const entry = product === null ? 0 : entryOf(product, cardmarketPrices(priceOf.get(product) ?? {}));
-      cards[id] = [link.hint, link.moves.join('|'), entry];
+      // Special printings are products of their own (Paradox Rift's cosmos holo Kingdra): TCGdex's
+      // link to each, kept when the product is that card.
+      const specials = {};
+      for (const [key, cm] of link.printings ?? []) {
+        if (!cm || !isSpecialPrinting(key) || productParts(index.byId.get(cm)?.name ?? '').name !== nameOf.get(id)) continue;
+        specials[key] = entryOf(cm, cardmarketPrices(priceOf.get(cm) ?? {}));
+        specialPrices++;
+      }
+      cards[id] = [link.hint, link.moves.join('|'), entry, link.printings ?? 0, Object.keys(specials).length ? specials : 0];
     }
   }
   console.log(
     `Cardmarket: ${tally.checked} of TCGdex's links confirmed, ${tally.corrected + tally.guessed} corrected or added ` +
-      `(${tally.guessed} of them among look-alike products), ${tally.none} cards without one`,
+      `(${tally.guessed} of them among look-alike products), ${tally.none} cards without one; ${specialPrices} special printings priced`,
   );
   const made = Date.parse(String(guide.createdAt)); // when Cardmarket made it: "2026-10-22T02:45:11+0200"
   return { updated: new Date(Number.isNaN(made) ? Date.now() : made).toISOString(), cards };
+}
+
+/**
+ * Every card's printings from TCGdex's details (shared/printings.ts): the plain ones it comes in
+ * (the row's printing bits), its special ones (row[10]: a cosmos holo, a stamped version…), which
+ * of them are promos rather than in its set's packs (row[11]), and for a stamped promo-set card,
+ * the set card it's a version of (row[12]). Sets TCGdex has no printing data for (every card one
+ * plain regular printing) keep the printings worked out from rarities.
+ */
+function applyPrintings(catalog, links) {
+  const isPromoSet = (set) => /promo/i.test(set.name);
+  const bySet = new Map();
+  for (const row of catalog.cards) {
+    row.length = 10; // an earlier build's extras are worked out afresh
+    if (!bySet.has(row[3])) bySet.set(row[3], []);
+    bySet.get(row[3]).push(row);
+  }
+  const extras = new Map(); // card id → [specials, promos, card it's a version of]
+  let detailed = 0;
+  let specials = 0;
+  let promos = 0;
+  for (const [setIndex, rows] of bySet) {
+    const found = rows.map((row) => ({ row, p: links.get(row[0])?.printings ? cardPrintings(links.get(row[0]).printings) : null }));
+    const generated = found.every(({ p }) => !p || (p.basics.length === 1 && p.basics[0] === 'normal' && !p.specials.length));
+    const cards = found.map(({ row, p }) => {
+      if (generated || !p) return { id: row[0], rarity: catalog.rarities[row[5]] ?? null, basics: VARIANTS.filter((_, bit) => row[9] & (1 << bit)), specials: [] };
+      detailed++;
+      row[9] = p.basics.reduce((bits, v) => bits | (1 << VARIANTS.indexOf(v)), 0);
+      return { id: row[0], rarity: catalog.rarities[row[5]] ?? null, basics: p.basics, specials: p.specials };
+    });
+    const setPromos = setPromoPrintings(cards, isPromoSet(catalog.sets[setIndex]));
+    for (const c of cards) {
+      const promo = setPromos.get(c.id) ?? [];
+      specials += c.specials.length;
+      promos += promo.length;
+      if (c.specials.length || promo.length) extras.set(c.id, [c.specials, promo, 0]);
+    }
+  }
+  // Stamped promo-set cards that are versions of a set's own (Build & Battle and prerelease promos)
+  const promoSet = (row) => isPromoSet(catalog.sets[row[3]]);
+  const versions = stampedPromoLinks(
+    catalog.cards.filter(promoSet).map((row) => ({
+      id: row[0],
+      name: row[1],
+      moves: links.get(row[0])?.moves ?? [],
+      stamps: (links.get(row[0])?.printings ?? []).flatMap(([key]) => parsePrinting(key).stamps),
+    })),
+    catalog.cards
+      .filter((row) => !promoSet(row))
+      .map((row) => ({ id: row[0], name: row[1], moves: links.get(row[0])?.moves ?? [], released: catalog.sets[row[3]].date ?? '9999' })),
+  );
+  for (const [promo, card] of versions) extras.set(promo, [...(extras.get(promo) ?? [[], [], 0]).slice(0, 2), card]);
+  for (const row of catalog.cards) {
+    const e = extras.get(row[0]);
+    if (e) row.push(e[0].length ? e[0] : 0, e[1].length ? e[1] : 0, e[2] || 0);
+  }
+  catalog.printings = 1; // the app reads promos from row[11] (an older catalog: it works them out)
+  console.log(
+    `Printings: ${detailed} cards from TCGdex's details; ${specials} special printings, ${promos} printings only promos come in, ` +
+      `${versions.size} stamped promo cards linked to their set`,
+  );
 }
 
 /** Set values: cards TCGplayer doesn't price get Cardmarket's price (ours, not TCGdex's copy). */
@@ -539,6 +680,7 @@ async function writeCardmarket(catalog, cardmarket) {
     const setId = catalog.sets[row[3]].id;
     if (!bySet.has(setId)) bySet.set(setId, {});
     bySet.get(setId)[row[0]] = entry;
+    for (const [key, special] of Object.entries(cardmarket.cards[row[0]]?.[4] || {})) bySet.get(setId)[`${row[0]}|${key}`] = special;
   }
   for (const [setId, cards] of bySet) {
     await writeFile(path.join(dir, `${setId}.json`), JSON.stringify({ version: 1, updated: cardmarket.updated, cards }));
@@ -585,6 +727,7 @@ async function main() {
   }
   const prints = await buildPrints(catalog);
   const { prices, links, earlierLinks } = await buildPrices(catalog);
+  applyPrintings(catalog, links);
   const cardmarket = await buildCardmarket(catalog, links, earlierLinks);
   if (cardmarket) applyCardmarket(catalog, prices, cardmarket);
   await write(catalog, prints, prices);
