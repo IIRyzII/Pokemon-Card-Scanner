@@ -1,5 +1,5 @@
 # Builds the card catalog + web app and publishes them to GitHub Pages.
-# Runs on every push to main, weekly (to pick up new card sets), or by hand.
+# Runs on every push to main, daily (Cardmarket's prices, and new card sets), or by hand.
 # The API address comes from web/.env.production (or the API_URL repository variable, if set).
 name: Deploy web app
 
@@ -14,7 +14,7 @@ on:
       - 'package-lock.json'
       - '.github/workflows/deploy-web.yml'
   schedule:
-    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+    - cron: '17 6 * * *' # daily 06:17 UTC, after Cardmarket's overnight price guide
   workflow_dispatch:
 
 permissions:

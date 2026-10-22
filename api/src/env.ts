@@ -12,6 +12,8 @@ export interface Env {
   PRICECHARTING_TOKEN?: string;
   /** Override for tests */
   TCGDEX_API?: string;
+  /** The published card catalog (GitHub Pages), for Cardmarket's prices per set */
+  CATALOG_URL?: string;
 }
 
 export interface SessionUser {

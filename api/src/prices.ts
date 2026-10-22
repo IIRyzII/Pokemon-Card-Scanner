@@ -1,5 +1,6 @@
 // Card cache, price refreshes, price history and item valuations.
 
+import { cardmarketRows, pricesOf, type CardmarketSetFile } from '../../shared/cardmarket.ts';
 import type { CardInfo, PriceRefreshResponse, PriceRow } from '../../shared/types.ts';
 import { valueItem } from '../../shared/values.ts';
 import { toItem, toPrice, toSale } from './db.ts';
@@ -22,6 +23,10 @@ export const PRICE_TTL_MS = 20 * 3_600_000;
 export const ON_OPEN_TTL_MS = 6 * 3_600_000;
 /** A card whose last refresh failed (TCGdex has short outages) is tried again after this. */
 const RETRY_FAILED_MS = 30 * 60_000;
+/** A set's Cardmarket prices from the catalog (rebuilt daily) are fetched again after this… */
+const CARDMARKET_TTL_MS = 6 * 3_600_000;
+/** …or, while the catalog has none for the set, after this. */
+const CARDMARKET_MISSING_TTL_MS = 3_600_000;
 
 async function cached<T>(env: Env, key: string, maxAgeMs: number): Promise<{ data: T; fresh: boolean } | null> {
   const row = await env.DB.prepare('SELECT data, fetched_at FROM card_cache WHERE card_id = ?')
@@ -97,12 +102,60 @@ function priceStmts(env: Env, cardId: string, rows: PriceRow[]): D1PreparedState
   return stmts;
 }
 
+/** How many of the catalog's Cardmarket files one run may still fetch (50 outbound requests per run). */
+export interface Budget {
+  cardmarketFiles: number;
+}
+
+type CardmarketLookup =
+  /** The catalog's prices: its checked Cardmarket product (none: no product it could be sure of) */
+  | { kind: 'catalog'; rows: PriceRow[] }
+  /** The catalog hasn't got the card (yet): TCGdex's copy */
+  | { kind: 'tcgdex' }
+  /** Couldn't look just now: keep the prices we have */
+  | { kind: 'keep' };
+
+type CachedSetFile = CardmarketSetFile | { missing: true; at: number };
+
+/**
+ * Cardmarket's prices for a card from the published catalog, which takes them from Cardmarket's own
+ * price guide through links it has checked. TCGdex's copy links some cards to the wrong product
+ * (Rayquaza ☆ from EX Deoxys, thousands of euros, to the plain Rayquaza, about €20).
+ */
+async function catalogCardmarket(env: Env, setId: string, cardId: string, budget?: Budget): Promise<CardmarketLookup> {
+  if (!env.CATALOG_URL) return { kind: 'tcgdex' };
+  const key = `cardmarket:${setId}`;
+  const hit = await cached<CachedSetFile>(env, key, CARDMARKET_TTL_MS);
+  let file = hit?.data ?? null;
+  const fresh = !!hit?.fresh && !('missing' in hit.data && Date.now() - hit.data.at > CARDMARKET_MISSING_TTL_MS);
+  if (!fresh && (!budget || budget.cardmarketFiles > 0)) {
+    if (budget) budget.cardmarketFiles--;
+    try {
+      const res = await fetch(`${env.CATALOG_URL.replace(/\/$/, '')}/cardmarket/${encodeURIComponent(setId)}.json`, {
+        headers: { Accept: 'application/json', 'User-Agent': 'PokeVault-API/1.0' },
+      });
+      if (res.status === 404) file = { missing: true, at: Date.now() };
+      else if (res.ok) file = (await res.json()) as CardmarketSetFile;
+      else throw new Error(`HTTP ${res.status}`);
+      await cacheStmt(env, key, file).run();
+    } catch (err) {
+      console.warn(`Cardmarket prices for ${setId} couldn't be fetched:`, err);
+    }
+  }
+  if (!file) return { kind: 'keep' };
+  if ('missing' in file) return { kind: 'tcgdex' };
+  const entry = file.cards[cardId];
+  if (entry === undefined) return { kind: 'tcgdex' };
+  return { kind: 'catalog', rows: entry === 0 ? [] : cardmarketRows(pricesOf(entry), file.updated) };
+}
+
 /**
  * Re-fetches card details + TCGplayer/Cardmarket prices: one TCGdex request, or up to three for a
  * card's `first` prices when TCGplayer's are missing (TCGdex leaves them out of some responses), so
- * it isn't valued from Cardmarket until its next refresh.
+ * it isn't valued from Cardmarket until its next refresh. Cardmarket's prices come from the
+ * catalog when it has the card (one more request per set, cached).
  */
-export async function refreshMarketPrices(env: Env, cardId: string, first = false): Promise<{ card: CardInfo; rows: PriceRow[] }> {
+export async function refreshMarketPrices(env: Env, cardId: string, first = false, budget?: Budget): Promise<{ card: CardInfo; rows: PriceRow[] }> {
   let raw = await fetchTcgdexCard(env, cardId);
   if (!raw) throw new HttpError(404, `Card ${cardId} was not found`);
   for (let again = 0; first && again < 2 && !reportedSources(raw).includes('tcgplayer'); again++) {
@@ -111,12 +164,22 @@ export async function refreshMarketPrices(env: Env, cardId: string, first = fals
   const set = await getSetInfo(env, raw.set.id);
   const card = normalizeCard(raw, set);
   const now = nowIso();
-  const rows = extractPrices(raw, now);
+  let rows = extractPrices(raw, now);
+  let sources: PriceRow['source'][] = reportedSources(raw);
+  const cardmarket = await catalogCardmarket(env, raw.set.id, cardId, budget);
+  if (cardmarket.kind !== 'tcgdex') {
+    rows = rows.filter((r) => r.source !== 'cardmarket');
+    sources = sources.filter((source) => source !== 'cardmarket');
+    if (cardmarket.kind === 'catalog') {
+      rows.push(...cardmarket.rows);
+      sources.push('cardmarket');
+    }
+  }
   await env.DB.batch([
     cacheStmt(env, cardId, { ...card, cacheVersion: CARD_CACHE_VERSION }),
     // Replace each source's rows with what it reports now (dropping printings it no longer lists).
     // A source missing from the response keeps the prices we had.
-    ...reportedSources(raw).map((source) =>
+    ...sources.map((source) =>
       env.DB.prepare('DELETE FROM card_prices WHERE card_id = ? AND source = ?').bind(cardId, source),
     ),
     ...priceStmts(env, cardId, rows),
@@ -183,9 +246,9 @@ export async function ownedVariants(env: Env, cardId: string): Promise<string[]>
 }
 
 /** Full refresh: market prices, then PriceCharting for owned printings, then item values. */
-export async function refreshCard(env: Env, cardId: string, extraVariants: string[] = []): Promise<void> {
+export async function refreshCard(env: Env, cardId: string, extraVariants: string[] = [], budget?: Budget): Promise<void> {
   try {
-    const { card } = await refreshMarketPrices(env, cardId);
+    const { card } = await refreshMarketPrices(env, cardId, false, budget);
     await refreshPriceCharting(env, card, [...(await ownedVariants(env, cardId)), ...extraVariants]);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -234,8 +297,8 @@ export async function recomputeValues(env: Env, cardId: string): Promise<void> {
 
 /**
  * Refreshes the collection's cards whose prices are older than `maxAgeMs`, stalest first, as many
- * as one run can: the free plan allows 50 outbound requests per run (one per card, plus the
- * occasional set lookup and the exchange-rate fetch).
+ * as one run can: the free plan allows 50 outbound requests per run (one per card, plus up to 8
+ * sets' Cardmarket prices from the catalog, the occasional set lookup and the exchange-rate fetch).
  */
 export async function refreshStalePrices(env: Env, maxAgeMs: number): Promise<PriceRefreshResponse> {
   await getRates(env); // once up front (and kept current even on quiet days), not by every card at once
@@ -252,12 +315,13 @@ export async function refreshStalePrices(env: Env, maxAgeMs: number): Promise<Pr
     .bind(cutoff, failedCutoff)
     .all<{ card_id: string }>();
   const batch = results.slice(0, env.PRICECHARTING_TOKEN ? 12 : 35);
+  const budget: Budget = { cardmarketFiles: 8 };
   let failed = 0;
   // A few at a time: much quicker than one by one, and still gentle on TCGdex.
   for (let i = 0; i < batch.length; i += 4) {
     await Promise.all(
       batch.slice(i, i + 4).map(({ card_id }) =>
-        refreshCard(env, card_id).catch((err) => {
+        refreshCard(env, card_id, [], budget).catch((err) => {
           failed++;
           console.warn(`Price refresh failed for ${card_id}:`, err);
         }),

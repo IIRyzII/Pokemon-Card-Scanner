@@ -1,7 +1,10 @@
 // Raw market prices from TCGdex (which aggregates TCGplayer in USD and Cardmarket in EUR).
 // Used by the API for the cards in the collection, and by the catalog builder for every card
-// (the "standard price" behind set values).
+// (the "standard price" behind set values). Cardmarket's prices are taken from Cardmarket's own
+// price guide instead where the catalog has them (shared/cardmarket.ts): TCGdex links some cards
+// to the wrong Cardmarket product.
 
+import { cardmarketPrices, cardmarketRows } from './cardmarket.ts';
 import type { PriceRow } from './values.ts';
 
 /** The pricing part of a TCGdex card. */
@@ -61,14 +64,7 @@ export function extractPrices(raw: TcgdexPricing, now: string): PriceRow[] {
     }
   }
   const cm = raw.pricing?.cardmarket;
-  if (cm && typeof cm === 'object') {
-    const updated = typeof cm.updated === 'string' ? cm.updated : now;
-    const base = { source: 'cardmarket' as const, gradeKey: 'ungraded', high: null, currency: 'EUR', url: null, updatedAt: updated };
-    const main = { market: price(cm.trend), low: price(cm.low), mid: price(cm.avg30) };
-    const holo = { market: price(cm['trend-holo']), low: price(cm['low-holo']), mid: price(cm['avg30-holo']) };
-    if (main.market ?? main.mid) rows.push({ ...base, ...main, variant: 'main', label: 'Cardmarket' });
-    if (holo.market ?? holo.mid) rows.push({ ...base, ...holo, variant: 'holo', label: 'Cardmarket (holo / reverse)' });
-  }
+  if (cm && typeof cm === 'object') rows.push(...cardmarketRows(cardmarketPrices(cm), typeof cm.updated === 'string' ? cm.updated : now));
   return rows;
 }
 

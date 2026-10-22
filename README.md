@@ -40,23 +40,24 @@ A phone-friendly web app for tracking a Pokémon card collection:
 │    recognition   │── API ─────────────────────────────────────►│  • prices + history       │
 └──────────────────┘             │ GitHub Actions        │        │ D1 database (SQLite)      │
                                  │  • builds catalog     │        │ hourly price refresh      │
-                                 │    weekly + deploys   │        └────────────┬──────────────┘
+                                 │    daily + deploys    │        └────────────┬──────────────┘
                                  └──────────┬───────────┘                     │
                                             └──── open card data ───► TCGdex ◄┘
 ```
 
 - **`web/`**: the app (React + TypeScript + Vite). Card recognition runs **on the phone**, so photos are never uploaded: it finds the card in the camera picture, straightens it, matches its picture against every card, and reads the printed number with Tesseract OCR when that's needed.
 - **`api/`**: our own API, a Cloudflare Worker with a D1 database. GitHub Pages can only host static files, so the part that stores data lives on Cloudflare's free tier.
-- **`scripts/build-catalog.mjs`**: builds **our own card catalog** (≈21,000 cards, 205 sets, 400 artists) from the open [TCGdex](https://tcgdex.dev) data, plus a **fingerprint of every card's picture** (`prints.bin`, about 750 KB) that the scanner matches against, and **every card's market price** (`prices.json`, about 210 KB) for set values. GitHub Actions rebuilds them every week, and the app searches, identifies scans and values sets with them with no third-party API calls.
+- **`scripts/build-catalog.mjs`**: builds **our own card catalog** (≈21,000 cards, 205 sets, 400 artists) from the open [TCGdex](https://tcgdex.dev) data, plus a **fingerprint of every card's picture** (`prints.bin`, about 750 KB) that the scanner matches against, and **every card's market price** (`prices.json`, about 210 KB) for set values. GitHub Actions rebuilds them every day, and the app searches, identifies scans and values sets with them with no third-party API calls.
   - The catalog also records which **printings** each card comes in (regular, holo, reverse holo, 1st edition), for binders and the add form. TCGdex has none for about 50 sets, mostly Black & White, XY and Sun & Moon (it marks every card "normal"). For those, the build works them out from each card's rarity in the open [pokemon-tcg-data](https://github.com/PokemonTCG/pokemon-tcg-data) files, which tell holo rares from plain ones: regular cards and holo rares also come as reverse holos, EX / GX / BREAK / full art / secret cards only as holos, and promos and special sets have no reverse holos. A card in a set TCGdex has no printings for can be added in any printing.
-- **`shared/`**: code used by both: grading scales, how a copy is valued, and outbound links.
+  - **Cardmarket prices** come from Cardmarket itself: its public product list and daily price guide (`cardmarket/<set>.json`, which the API reads). TCGdex links some cards to the wrong Cardmarket product. For example, it links the Gold Star Rayquaza from EX Deoxys (lowest offer about €5,000) to the plain Rayquaza from the same set (about €20), Deoxys ex to plain Deoxys, and every Aquapolis holo to its non-holo printing. So the build checks every card's link against Cardmarket's product name and attacks ("Rayquaza Gold Star [Spiral Rush | Holy Star]") and corrects the wrong ones. Where a set has look-alike products (a card and its holo or full-art printing), it uses the order Cardmarket numbers them in. In a sample of 2,700 cards from 20 sets, about 1 link in 10 was corrected or added, and 3 cards were left without a Cardmarket price rather than given a wrong one.
+- **`shared/`**: code used by both: grading scales, how a copy is valued, Cardmarket links, and outbound links.
 
 ### Where prices come from
 
 | Price | Source | Notes |
 |---|---|---|
-| Raw market price | TCGplayer (USD) + Cardmarket (EUR), via TCGdex | Automatic for cards in your collection: refreshed when you open the app if they're more than 6 hours old, and at least daily in the background. If TCGdex leaves a source out of a response (it sometimes does), the last prices from that source are kept. |
-| Set values | The same market prices for every card in the catalog | One near-mint copy of each card's standard printing. Refreshed weekly when the site rebuilds. |
+| Raw market price | TCGplayer (USD), via TCGdex; Cardmarket (EUR), from Cardmarket's own daily price guide through the catalog's checked links | Automatic for cards in your collection: refreshed when you open the app if they're more than 6 hours old, and at least daily in the background. If TCGdex leaves TCGplayer out of a response (it sometimes does), the last TCGplayer prices are kept. Until the catalog has a set's Cardmarket prices (a site built before this), TCGdex's copy is used. |
+| Set values | The same market prices for every card in the catalog | One near-mint copy of each card's standard printing. Cardmarket's are refreshed daily when the site rebuilds, TCGplayer's every 6 days. |
 | eBay "last sold" | **You log them** in the app | eBay closed its public sold-listings API in 2025 and doesn't allow scraping. Each grade has a one-tap link to eBay's sold results. |
 | Graded price points | PriceCharting (optional) | Needs a paid PriceCharting subscription. Their prices are built from eBay sales. |
 | Exchange rates | European Central Bank daily reference rates | Free. Our API fetches them twice a day and converts USD/EUR prices into your currency. |
@@ -188,9 +189,9 @@ cd api && npm test          # end-to-end API test — needs a fresh `npm run dev
 npm run catalog             # rebuild the card catalog and picture fingerprints from TCGdex
 ```
 
-The first `npm run catalog` downloads every card's small picture (about 20,000 images) to fingerprint them, which takes around 10 minutes. After that, fingerprints are reused and only new cards are downloaded. The weekly GitHub build reuses the ones already on your site. Without `prints.bin`, the scanner still works by reading the card's text.
+The first `npm run catalog` downloads every card's small picture (about 20,000 images) to fingerprint them, which takes around 10 minutes. After that, fingerprints are reused and only new cards are downloaded. The daily GitHub build reuses the ones already on your site. Without `prints.bin`, the scanner still works by reading the card's text.
 
-Market prices for set values take one small request per card, sometimes three, because TCGdex leaves TCGplayer's prices out of some responses and the build asks again (a few minutes in all). They're reused while they're less than 6 days old, so only the weekly build refreshes them (`--prices-max-age-days` changes that).
+Market prices for set values take one small request per card, sometimes three, because TCGdex leaves TCGplayer's prices out of some responses and the build asks again (a few minutes in all). They're reused while they're less than 6 days old (`--prices-max-age-days` changes that). Cardmarket's prices are two downloads (its product list and price guide, about 30 MB), so every build has the day's.
 
 To test on your phone before deploying, use the GitHub Pages URL. The camera and secure sign-in only work over `https://` or on `localhost`.
 
@@ -203,6 +204,6 @@ To test on your phone before deploying, use the GitHub Pages URL. The camera and
 
 ## Credits
 
-Card data and images come from [TCGdex](https://tcgdex.dev), an open-source Pokémon TCG database. Where TCGdex has no picture, the app tries [pokemontcg.io](https://pokemontcg.io)'s image instead. Exchange rates come from the [European Central Bank](https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html). Market prices are TCGplayer and Cardmarket data as published by TCGdex. Links go to eBay, PriceCharting, TCGplayer, Cardmarket, [Serebii](https://www.serebii.net/card/) and [Art of Pokémon](https://www.artofpkm.com/).
+Card data and images come from [TCGdex](https://tcgdex.dev), an open-source Pokémon TCG database. Where TCGdex has no picture, the app tries [pokemontcg.io](https://pokemontcg.io)'s image instead. Exchange rates come from the [European Central Bank](https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html). Market prices are TCGplayer data as published by TCGdex, and [Cardmarket](https://www.cardmarket.com)'s public product list and price guide. Links go to eBay, PriceCharting, TCGplayer, Cardmarket, [Serebii](https://www.serebii.net/card/) and [Art of Pokémon](https://www.artofpkm.com/).
 
 PokéVault is an unofficial fan project. Pokémon and all related names are trademarks of Nintendo, Creatures and GAME FREAK.

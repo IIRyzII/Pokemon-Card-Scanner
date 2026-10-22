@@ -12,7 +12,10 @@
     "CURRENCY": "GBP",
     // "open": anyone can sign up but starts as Pending until an admin approves them.
     // "closed": only the very first account (which becomes admin) can sign up.
-    "REGISTRATION": "open"
+    "REGISTRATION": "open",
+    // The card catalog the web app publishes: the API takes Cardmarket's prices from it (checked
+    // links to Cardmarket's own price guide; TCGdex's copy links some cards to the wrong product).
+    "CATALOG_URL": "https://iiryzii.github.io/Pokemon-Card-Scanner/catalog"
   },
   "d1_databases": [
     {

@@ -9,6 +9,11 @@
 // And it records every card's market price (prices.json) for set values; those are refreshed
 // when they're more than a few days old.
 //
+// Cardmarket's prices come from Cardmarket itself (its public product list and daily price guide),
+// not TCGdex's copy: TCGdex links some cards to the wrong Cardmarket product (Rayquaza ☆ to the
+// plain Rayquaza), so every card's link is checked against its name and attacks and corrected
+// (shared/cardmarket.ts). They're published per set (cardmarket/<set>.json) for the API.
+//
 // Usage: node --experimental-strip-types scripts/build-catalog.mjs [--out web/public/catalog] [--if-missing] [--fallback-url https://you.github.io/repo/catalog] [--prices-max-age-days 6]
 //   --if-missing:   do nothing when a catalog already exists (used by `npm run dev`).
 //   --fallback-url: the published catalog: prints and recent prices are reused from it, and if
@@ -23,10 +28,12 @@ import jpeg from 'jpeg-js';
 import { cardPrint, PRINT_SPEC, PRINT_WORDS } from '../shared/cardprint.ts';
 import { VARIANTS } from '../shared/grading.ts';
 import { inferPrintings } from '../shared/printings.ts';
+import { cardmarketIndex, cardmarketPrices, cardmarketRows, entryOf, linkSet, pricesOf } from '../shared/cardmarket.ts';
 import { extractPrices, reportedSources, standardPrice } from '../shared/market.ts';
 
 const API = 'https://api.tcgdex.net/v2/en';
 const GQL = 'https://api.tcgdex.net/v2/graphql';
+const CARDMARKET = 'https://downloads.s3.cardmarket.com/productCatalog';
 const IMAGE_BASE = 'https://assets.tcgdex.net/en';
 // Pokémon TCG Pocket is a digital-only game, so its cards can never be scanned.
 const EXCLUDED_SERIES = new Set(['tcgp']);
@@ -370,16 +377,36 @@ async function previousPrices() {
 }
 
 /**
+ * Each card's TCGdex link to Cardmarket and its attacks, from an earlier build: card id →
+ * [TCGdex's product or null, "attack|attack", our entry], or null. (Only cards fetched again
+ * get them afresh.)
+ */
+async function previousCardmarket() {
+  for (const read of earlierSources()) {
+    try {
+      const file = JSON.parse(new TextDecoder().decode(await read('cardmarket.json')));
+      if (file.version === 1) return { updated: file.updated, byId: new Map(Object.entries(file.cards)) };
+    } catch {
+      // nothing usable there; try the next source
+    }
+  }
+  return null;
+}
+
+/**
  * The market price of one raw copy of every card's standard printing (TCGplayer USD, else
  * Cardmarket EUR), in catalog order: what set values add up. TCGdex only has prices per card, so
  * a full refresh is one small request per card; it's skipped while the last one is recent.
  */
 async function buildPrices(catalog) {
   const earlier = await previousPrices();
+  const earlierLinks = await previousCardmarket();
   const recent = earlier && Date.now() - Date.parse(earlier.updated) < PRICES_MAX_AGE_DAYS * 86_400_000;
   const n = catalog.cards.length;
   const usd = new Array(n).fill(null);
   const eur = new Array(n).fill(null);
+  /** card id → { hint: TCGdex's Cardmarket product, moves: attack names } */
+  const links = new Map();
   const todo = [];
   catalog.cards.forEach((row, i) => {
     const old = earlier?.byId.get(row[0]);
@@ -387,8 +414,13 @@ async function buildPrices(catalog) {
       usd[i] = old.usd;
       eur[i] = old.eur;
     }
-    if (!recent || !old) todo.push(i);
+    const link = earlierLinks?.byId.get(row[0]);
+    if (link) links.set(row[0], { hint: link[0], moves: link[1] ? link[1].split('|') : [] });
+    if (!recent || !old || !link) todo.push(i);
   });
+  // Cards without a Cardmarket link yet go first: when TCGdex stops answering part way (it does),
+  // the next build carries on from where this one stopped rather than from the oldest sets again.
+  todo.sort((a, b) => Number(links.has(catalog.cards[a][0])) - Number(links.has(catalog.cards[b][0])) || a - b);
   console.log(`Fetching market prices for ${todo.length} cards${recent ? ` (the rest are from ${earlier.updated.slice(0, 10)})` : ''}…`);
   const now = new Date().toISOString();
   let failedInARow = 0;
@@ -409,6 +441,9 @@ async function buildPrices(catalog) {
     try {
       let raw = await fetchCard(id);
       if (!raw) return;
+      const moves = [...(raw.attacks ?? []), ...(raw.abilities ?? [])].map((m) => m?.name).filter(Boolean);
+      const hint = raw.pricing?.cardmarket?.idProduct ?? links.get(id)?.hint ?? null;
+      links.set(id, { hint: typeof hint === 'number' ? hint : null, moves });
       // TCGdex leaves TCGplayer's prices out of some responses: ask again before taking Cardmarket's,
       // and keep the TCGplayer price from last time rather than switching sources.
       for (let again = 0; again < 2 && !reportedSources(raw).includes('tcgplayer'); again++) {
@@ -432,7 +467,83 @@ async function buildPrices(catalog) {
   else if (failed) console.log(`  ${failed} cards' prices couldn't be fetched (kept their earlier price, if any)`);
   const priced = usd.filter((v, i) => v !== null || eur[i] !== null).length;
   console.log(`  ${priced} of ${n} cards have a market price`);
-  return { version: 1, updated: recent && !todo.length ? earlier.updated : now, usd, eur };
+  return { prices: { version: 1, updated: recent && !todo.length ? earlier.updated : now, usd, eur }, links, earlierLinks };
+}
+
+/**
+ * Every card's Cardmarket product, checked (shared/cardmarket.ts), with Cardmarket's own prices
+ * from its daily price guide. Without Cardmarket's files, the earlier build's are kept.
+ * Returns { updated, cards: card id → [TCGdex's product, "attack|attack", entry] } or null.
+ */
+async function buildCardmarket(catalog, links, earlierLinks) {
+  let products;
+  let guide;
+  try {
+    [products, guide] = await Promise.all([
+      getJSON(`${CARDMARKET}/productList/products_singles_6.json`),
+      getJSON(`${CARDMARKET}/priceGuide/price_guide_6.json`),
+    ]);
+    if (!products?.products?.length || !guide?.priceGuides?.length) throw new Error('empty');
+  } catch (err) {
+    console.warn(`Cardmarket's product list or price guide couldn't be fetched (${err.message})`);
+    if (!earlierLinks) return null;
+    console.warn(`  kept the earlier build's Cardmarket prices (from ${earlierLinks.updated.slice(0, 10)})`);
+    return { updated: earlierLinks.updated, cards: Object.fromEntries(earlierLinks.byId) };
+  }
+  const index = cardmarketIndex(products.products);
+  const priceOf = new Map(guide.priceGuides.map((g) => [g.idProduct, g]));
+  const bySet = new Map();
+  for (const row of catalog.cards) {
+    const setId = catalog.sets[row[3]].id;
+    if (!bySet.has(setId)) bySet.set(setId, []);
+    const link = links.get(row[0]);
+    if (link) bySet.get(setId).push({ id: row[0], name: row[1], moves: link.moves, hint: link.hint });
+  }
+  const cards = {};
+  const tally = { checked: 0, corrected: 0, guessed: 0, none: 0 };
+  for (const list of bySet.values()) {
+    for (const [id, { product, how }] of linkSet(index, list)) {
+      tally[how]++;
+      const link = links.get(id);
+      const entry = product === null ? 0 : entryOf(product, cardmarketPrices(priceOf.get(product) ?? {}));
+      cards[id] = [link.hint, link.moves.join('|'), entry];
+    }
+  }
+  console.log(
+    `Cardmarket: ${tally.checked} of TCGdex's links confirmed, ${tally.corrected + tally.guessed} corrected or added ` +
+      `(${tally.guessed} of them among look-alike products), ${tally.none} cards without one`,
+  );
+  const made = Date.parse(String(guide.createdAt)); // when Cardmarket made it: "2026-10-22T02:45:11+0200"
+  return { updated: new Date(Number.isNaN(made) ? Date.now() : made).toISOString(), cards };
+}
+
+/** Set values: cards TCGplayer doesn't price get Cardmarket's price (ours, not TCGdex's copy). */
+function applyCardmarket(catalog, prices, cardmarket) {
+  catalog.cards.forEach((row, i) => {
+    const entry = cardmarket.cards[row[0]]?.[2];
+    if (entry === undefined || prices.usd[i] !== null) return;
+    const variants = Object.fromEntries(VARIANTS.map((v, bit) => [v, !!(row[9] & (1 << bit))]));
+    const p = entry === 0 ? null : standardPrice(variants, cardmarketRows(pricesOf(entry), cardmarket.updated));
+    prices.eur[i] = p?.amount ?? null;
+  });
+}
+
+async function writeCardmarket(catalog, cardmarket) {
+  await writeFile(path.join(OUT_DIR, 'cardmarket.json'), JSON.stringify({ version: 1, updated: cardmarket.updated, cards: cardmarket.cards }));
+  const dir = path.join(OUT_DIR, 'cardmarket');
+  await mkdir(dir, { recursive: true });
+  const bySet = new Map();
+  for (const row of catalog.cards) {
+    const entry = cardmarket.cards[row[0]]?.[2];
+    if (entry === undefined) continue; // not looked at yet: the API goes by TCGdex's
+    const setId = catalog.sets[row[3]].id;
+    if (!bySet.has(setId)) bySet.set(setId, {});
+    bySet.get(setId)[row[0]] = entry;
+  }
+  for (const [setId, cards] of bySet) {
+    await writeFile(path.join(dir, `${setId}.json`), JSON.stringify({ version: 1, updated: cardmarket.updated, cards }));
+  }
+  console.log(`Wrote Cardmarket prices for ${bySet.size} sets`);
 }
 
 async function write(catalog, prints, prices) {
@@ -472,7 +583,12 @@ async function main() {
     catalog = await getJSON(`${FALLBACK_URL.replace(/\/$/, '')}/catalog.json`);
     if (!catalog?.cards?.length) throw err;
   }
-  await write(catalog, await buildPrints(catalog), await buildPrices(catalog));
+  const prints = await buildPrints(catalog);
+  const { prices, links, earlierLinks } = await buildPrices(catalog);
+  const cardmarket = await buildCardmarket(catalog, links, earlierLinks);
+  if (cardmarket) applyCardmarket(catalog, prices, cardmarket);
+  await write(catalog, prints, prices);
+  if (cardmarket) await writeCardmarket(catalog, cardmarket);
 }
 
 const t0 = Date.now();
