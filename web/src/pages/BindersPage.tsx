@@ -23,6 +23,8 @@ import { Sheet } from '../components/Sheet.tsx';
 import { api } from '../lib/api.ts';
 import {
   binderCards,
+  promosOf,
+  type PrintingChoice,
   binderStats,
   fixBinderPrintings,
   ownedPrintings,
@@ -225,7 +227,7 @@ function NewBinder({ shelf, onClose }: { shelf: Binder[]; onClose: () => void })
   const [kind, setKind] = useState<Kind>('set');
   const [setId, setSetId] = useState('');
   const [pokemon, setPokemon] = useState('');
-  const [every, setEvery] = useState(false);
+  const [printings, setPrintings] = useState<PrintingChoice>('one');
   const [copies, setCopies] = useState(1);
   const [pockets, setPockets] = useState<Pockets>(9);
   const [name, setName] = useState<string | null>(null); // null: follow what's picked
@@ -239,11 +241,18 @@ function NewBinder({ shelf, onClose }: { shelf: Binder[]; onClose: () => void })
     if (kind === 'pokemon') return pokemonCardsOf(catalog, pokemon);
     return [];
   }, [catalog, kind, setId, pokemon]);
-  const cards = useMemo(() => binderCards(picked, every, copies), [picked, every, copies]);
+  // Printings only promos come in (a common's blister-pack holo): left out, or last in a grand master set.
+  const promos = useMemo(() => (catalog ? promosOf(catalog, picked) : new Set<string>()), [catalog, picked]);
+  const cards = useMemo(() => binderCards(picked, printings, copies, promos), [picked, printings, copies, promos]);
+  const promoCount = picked.reduce((n, c) => n + (c.variants ?? []).filter((v) => promos.has(`${c.id}|${v}`)).length, 0);
   const total = cards.reduce((n, c) => n + c.copies, 0);
   const set = catalog?.sets.find((s) => s.id === setId);
   const suggested =
-    kind === 'set' && set ? `${set.name}${every ? ' master set' : ''}` : kind === 'pokemon' && pokemon.trim() ? titleCase(pokemon) : '';
+    kind === 'set' && set
+      ? `${set.name}${printings === 'master' ? ' master set' : printings === 'grand' ? ' grand master set' : ''}`
+      : kind === 'pokemon' && pokemon.trim()
+        ? titleCase(pokemon)
+        : '';
   const shownName = name ?? suggested;
   const ready = shownName.trim() && (kind === 'empty' || cards.length > 0);
 
@@ -323,17 +332,24 @@ function NewBinder({ shelf, onClose }: { shelf: Binder[]; onClose: () => void })
             <fieldset>
               <legend>Printings</legend>
               <div className="segmented">
-                <button type="button" className={!every ? 'on' : ''} aria-pressed={!every} onClick={() => setEvery(false)}>
-                  One of each card
-                </button>
-                <button type="button" className={every ? 'on' : ''} aria-pressed={every} onClick={() => setEvery(true)}>
-                  Every printing
-                </button>
+                {(
+                  [
+                    ['one', 'One of each'],
+                    ['master', 'Master set'],
+                    ['grand', 'Grand master'],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button type="button" key={k} className={printings === k ? 'on' : ''} aria-pressed={printings === k} onClick={() => setPrintings(k)}>
+                    {label}
+                  </button>
+                ))}
               </div>
               <p className="faint small">
-                {every
-                  ? 'A master set: each card in every printing it comes in (regular, reverse holo, holo…), side by side.'
-                  : 'Each card in its main printing (regular, or holo for holo rares).'}
+                {printings === 'one'
+                  ? 'Each card in its main printing (regular, or holo for holo rares).'
+                  : printings === 'master'
+                    ? 'A master set: each card in every printing from the packs (regular, reverse holo, holo…), side by side. Promo printings are left out.'
+                    : `A grand master set: the master set, then the promo printings at the end: holos of commons from blister packs and boxes, stamped and theme-deck versions${promoCount ? ` (${promoCount} here)` : ' (none here)'}.`}
               </p>
             </fieldset>
             <label>

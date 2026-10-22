@@ -1,8 +1,9 @@
 // Binders: every pocket in order, page by page, and which ones the collection fills.
 
-import { fixPrinting } from '../../../shared/printings.ts';
+import type { Variant } from '../../../shared/grading.ts';
+import { fixPrinting, printingOrder } from '../../../shared/printings.ts';
 import type { BinderCard, CollectionItem } from '../../../shared/types.ts';
-import { normName, type Catalog, type CatalogCard } from './catalog.ts';
+import { normName, type Catalog, type CatalogCard, type CatalogSet } from './catalog.ts';
 
 /** A pocket's footnote: which printing goes in it. */
 export const PRINTING_NOTES: Record<string, string> = {
@@ -145,15 +146,78 @@ export function percentFilled({ filled, pockets }: Pick<BinderStats, 'filled' | 
   return `${filled < pockets ? Math.min(pct, 99) : 100}%`;
 }
 
-/** The printings a binder starts with for a card: its first (as adding a card does) or all of them. */
-export function printingsOf(card: Pick<CatalogCard, 'variants'>, every: boolean): string[] {
-  const all = card.variants?.length ? card.variants : ['normal'];
-  return every ? [...all] : [all[0]];
+/** Under this share of the cards of one rarity in a set, a printing is a promo… */
+const PROMO_SHARE = 0.15;
+/** …judged among at least this many cards. */
+const PROMO_AMONG = 8;
+
+/** Promo sets: everything in them is a promo. */
+export const isPromoSet = (set: Pick<CatalogSet, 'name'>) => /promo/i.test(set.name);
+
+/**
+ * The printings (card id | printing) a set's cards come in only as promos, not in the set's own
+ * packs: Paradox Rift's Snorunt as a cosmos holo from a blister pack, Silver Tempest's holo-rare
+ * Dragonite without its holo (a stamped theme-deck card), Obsidian Flames' holo Charmander. Going
+ * by the set itself: a printing that hardly any card of the same rarity comes in (under 15% of 8
+ * or more), which finds Obsidian Flames' 14 blister and box holos. A card's only printing is
+ * never a promo here.
+ */
+export function promoPrintings(setCards: readonly CatalogCard[]): Set<string> {
+  const promos = new Set<string>();
+  if (!setCards.length || isPromoSet(setCards[0].set)) return promos;
+  const byRarity = new Map<string, CatalogCard[]>();
+  for (const c of setCards) {
+    if (!c.variants?.length) continue;
+    const r = c.rarity ?? '';
+    byRarity.set(r, [...(byRarity.get(r) ?? []), c]);
+  }
+  for (const group of byRarity.values()) {
+    if (group.length < PROMO_AMONG) continue;
+    const counts = new Map<Variant, number>();
+    for (const c of group) for (const v of c.variants!) counts.set(v, (counts.get(v) ?? 0) + 1);
+    for (const [v, n] of counts) {
+      if (n / group.length >= PROMO_SHARE) continue;
+      for (const c of group) if (c.variants!.length > 1 && c.variants!.includes(v)) promos.add(key(c.id, v));
+    }
+  }
+  return promos;
 }
 
-/** Binder cards for catalog cards, in their order: `copies` of each printing. */
-export const binderCards = (cards: CatalogCard[], every: boolean, copies: number): BinderCard[] =>
-  cards.flatMap((card) => printingsOf(card, every).map((variant) => ({ cardId: card.id, variant, copies })));
+/** Promo printings of every set the cards are from. */
+export function promosOf(catalog: Pick<Catalog, 'bySet'>, cards: readonly Pick<CatalogCard, 'set'>[]): Set<string> {
+  const promos = new Set<string>();
+  for (const setId of new Set(cards.map((c) => c.set.id))) for (const p of promoPrintings(catalog.bySet.get(setId) ?? [])) promos.add(p);
+  return promos;
+}
+
+export const isPromoPrinting = (promos: ReadonlySet<string>, cardId: string, variant: string) => promos.has(key(cardId, variant));
+
+/**
+ * The printings a binder starts with for a card, from the set's own packs: its main one (as adding
+ * a card does), or all of them. `promos`: printings only promos come in (promoPrintings).
+ */
+export function printingsOf(card: Pick<CatalogCard, 'id' | 'variants'>, every: boolean, promos?: ReadonlySet<string>): string[] {
+  const all = card.variants?.length ? card.variants : ['normal'];
+  const own = promos ? all.filter((v) => !promos.has(key(card.id, v))) : all;
+  const printings = own.length ? own : all;
+  return every ? printingOrder(printings) : [printings[0]];
+}
+
+/**
+ * How many printings a binder made from cards has: one of each card, a master set (every printing
+ * from the set's own packs), or a grand master set (the master set, then the promo printings).
+ */
+export type PrintingChoice = 'one' | 'master' | 'grand';
+
+/** Binder cards for catalog cards, in their order, `copies` of each printing; a grand master set's promos last. */
+export function binderCards(cards: CatalogCard[], choice: PrintingChoice, copies: number, promos: ReadonlySet<string> = new Set()): BinderCard[] {
+  const line = (cardId: string, variant: string): BinderCard => ({ cardId, variant, copies });
+  const main = cards.flatMap((card) => printingsOf(card, choice !== 'one', promos).map((v) => line(card.id, v)));
+  if (choice !== 'grand') return main;
+  const inMain = new Set(main.map((c) => key(c.cardId, c.variant)));
+  const extra = cards.flatMap((card) => (card.variants ?? []).filter((v) => promos.has(key(card.id, v)) && !inMain.has(key(card.id, v))).map((v) => line(card.id, v)));
+  return [...main, ...extra];
+}
 
 /** Every card in a set, in number order. */
 export const setCardsOf = (catalog: Catalog, setId: string) => catalog.bySet.get(setId) ?? [];

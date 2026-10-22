@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cardNumberText } from '../../../shared/links.ts';
+import { printingOrder } from '../../../shared/printings.ts';
 import { CardImage } from '../components/CardImage.tsx';
 import { variantLabel } from '../components/CardTile.tsx';
 import { IconCamera, IconImage } from '../components/Icons.tsx';
@@ -577,7 +578,7 @@ function FindPrompt({
   const [choosing, setChoosing] = useState(false);
   const { card } = best;
   // Which printing this copy is (a reverse holo among holos), when the card comes in more than one
-  const printings = card.variants ?? [];
+  const printings = printingOrder(card.variants ?? []);
   const [printing, setPrinting] = useState(printings[0]);
   const n = owned(best);
   useEffect(() => {

@@ -5,14 +5,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MAX_COPIES, POCKET_LAYOUTS, POCKET_SIZES, colourOf, type BinderColour, type Pockets } from '../../../shared/binders.ts';
 import { VARIANTS } from '../../../shared/grading.ts';
 import { cardNumberText } from '../../../shared/links.ts';
-import { fixPrinting } from '../../../shared/printings.ts';
+import { fixPrinting, printingOrder } from '../../../shared/printings.ts';
 import type { Binder, BinderCard } from '../../../shared/types.ts';
 import { CardImage } from '../components/CardImage.tsx';
 import { ColourPicker } from '../components/ColourPicker.tsx';
 import { useFeedback } from '../components/feedback.tsx';
 import { IconBack, IconSearch, IconTrash } from '../components/Icons.tsx';
 import { api } from '../lib/api.ts';
-import { printingNote, printingsOf } from '../lib/binders.ts';
+import { printingNote, printingsOf, promosOf } from '../lib/binders.ts';
 import { searchCards, type CatalogCard } from '../lib/catalog.ts';
 import { goBack, navigate } from '../lib/router.ts';
 import { useCatalog } from '../lib/useCatalog.ts';
@@ -71,7 +71,10 @@ export function BinderEditPage({ id }: { id: string }) {
       return next;
     });
   const add = (card: CatalogCard) =>
-    setLines((ls) => [...ls, { cardId: card.id, variant: printingsOf(card, false)[0], copies: allCopies, key: nextKey.current++ }]);
+    setLines((ls) => [
+      ...ls,
+      { cardId: card.id, variant: printingsOf(card, false, catalog ? promosOf(catalog, [card]) : undefined)[0], copies: allCopies, key: nextKey.current++ },
+    ]);
 
   async function save() {
     setSaving(true);
@@ -199,7 +202,7 @@ export function BinderEditPage({ id }: { id: string }) {
           const card = catalog?.byId.get(line.cardId);
           const start = at;
           at += line.copies;
-          const printings: string[] = card?.variants?.length ? [...card.variants] : [...VARIANTS];
+          const printings: string[] = card?.variants?.length ? printingOrder(card.variants) : [...VARIANTS];
           if (!printings.includes(line.variant)) printings.push(line.variant);
           return (
             <li key={line.key} className="scan-entry">

@@ -1,7 +1,21 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { binderCards, binderStats, fixBinderPrintings, missingOf, percentFilled, ownedPrintings, pagesOf, pocketsOf, pokemonCardsOf, printingsOf, setCardsOf } from './binders.ts';
+import {
+  binderCards,
+  binderStats,
+  fixBinderPrintings,
+  missingOf,
+  percentFilled,
+  ownedPrintings,
+  pagesOf,
+  pocketsOf,
+  pokemonCardsOf,
+  printingsOf,
+  promoPrintings,
+  promosOf,
+  setCardsOf,
+} from './binders.ts';
 import { buildCatalog, type CatalogJson } from './catalog.ts';
 
 // Runs against the real generated catalog (npm run catalog).
@@ -14,17 +28,17 @@ test('a Paradox Rift binder has every card in number order; a master set has eve
     cards.slice(0, 3).map((c) => c.number),
     ['001', '002', '003'],
   );
-  const oneEach = binderCards(cards, false, 1);
+  const oneEach = binderCards(cards, 'one', 1);
   assert.equal(oneEach.length, 266);
   assert.deepEqual(oneEach[0], { cardId: 'sv04-001', variant: 'normal', copies: 1 });
-  const master = binderCards(cards, true, 1);
+  const master = binderCards(cards, 'master', 1);
   assert.ok(master.length > 266, 'reverse holos too');
   assert.deepEqual(
     master.slice(0, 2).map((c) => `${c.cardId} ${c.variant}`),
     ['sv04-001 normal', 'sv04-001 reverse'],
     "each card's printings side by side",
   );
-  assert.equal(binderCards(cards.slice(-1), true, 1)[0].variant, 'holo', 'the last secret rare only comes as a holo');
+  assert.equal(binderCards(cards.slice(-1), 'master', 1)[0].variant, 'holo', 'the last secret rare only comes as a holo');
 });
 
 test("a Pokémon binder has all that Pokémon's cards, oldest first, with the copies asked for", () => {
@@ -34,7 +48,7 @@ test("a Pokémon binder has all that Pokémon's cards, oldest first, with the co
   assert.equal(shuckles[0].id, 'neo1-72', 'Neo Genesis first');
   assert.ok(shuckles.some((c) => c.name === 'Shuckle GX'));
   assert.deepEqual(
-    binderCards(shuckles.slice(0, 1), false, 9),
+    binderCards(shuckles.slice(0, 1), 'one', 9),
     [{ cardId: 'neo1-72', variant: 'normal', copies: 9 }],
   );
   assert.deepEqual(pokemonCardsOf(cat, '  '), []);
@@ -42,9 +56,36 @@ test("a Pokémon binder has all that Pokémon's cards, oldest first, with the co
 });
 
 test('printings: the first one, or all of them; unknown printings count as regular', () => {
-  assert.deepEqual(printingsOf({ variants: ['holo', 'reverse'] }, false), ['holo']);
-  assert.deepEqual(printingsOf({ variants: ['holo', 'reverse'] }, true), ['holo', 'reverse']);
-  assert.deepEqual(printingsOf({ variants: null }, true), ['normal']);
+  assert.deepEqual(printingsOf({ id: 'x', variants: ['holo', 'reverse'] }, false), ['holo'], 'one of each: the pack printing');
+  assert.deepEqual(printingsOf({ id: 'x', variants: ['holo', 'reverse'] }, true), ['reverse', 'holo'], 'a master set: reverse holo, then holo');
+  assert.deepEqual(printingsOf({ id: 'x', variants: null }, true), ['normal']);
+});
+
+test('promo printings: the holos of a few commons, last in a grand master set', () => {
+  const rift = setCardsOf(cat, 'sv04');
+  const promos = promoPrintings(rift);
+  // Snorunt, Vanilluxe, Honedge and Doublade came as cosmos holos in blister packs and boxes
+  assert.deepEqual([...promos].sort(), ['sv04-037|holo', 'sv04-045|holo', 'sv04-131|holo', 'sv04-132|holo']);
+  const master = binderCards(rift, 'master', 1, promos);
+  assert.ok(!master.some((c) => c.cardId === 'sv04-037' && c.variant === 'holo'), 'not in a master set');
+  const grand = binderCards(rift, 'grand', 1, promos);
+  assert.equal(grand.length, master.length + 4);
+  assert.deepEqual(
+    grand.slice(-4).map((c) => `${c.cardId} ${c.variant}`),
+    ['sv04-037 holo', 'sv04-045 holo', 'sv04-131 holo', 'sv04-132 holo'],
+    'at the end, in the set order',
+  );
+  assert.deepEqual(
+    master.filter((c) => c.cardId === 'sv04-037').map((c) => c.variant),
+    ['normal', 'reverse'],
+  );
+  // A holo rare whose non-holo is a stamped deck card: its main printing is the holo
+  const tempest = setCardsOf(cat, 'swsh12');
+  const dragonite = tempest.find((c) => c.id === 'swsh12-131')!;
+  assert.deepEqual(printingsOf(dragonite, false, promoPrintings(tempest)), ['holo']);
+  // Promo sets have no promo printings of their own; a card's only printing is never one
+  assert.equal(promoPrintings(setCardsOf(cat, 'svp')).size, 0);
+  assert.ok(!promosOf(cat, setCardsOf(cat, 'xy7')).has('xy7-75a|holo'));
 });
 
 test('copies in the collection fill pockets of their card and printing, first pockets first', () => {

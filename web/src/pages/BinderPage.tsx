@@ -19,6 +19,8 @@ import {
   percentFilled,
   pocketsOf,
   printingNote,
+  promosOf,
+  isPromoPrinting,
   type Pocket,
 } from '../lib/binders.ts';
 import type { Catalog, CatalogCard } from '../lib/catalog.ts';
@@ -55,6 +57,11 @@ export function BinderPage({ id }: { id: string }) {
   const cards = useMemo(() => (binder ? fixBinderPrintings(binder.cards, known) : []), [binder, known]);
   const owned = useMemo(() => ownedPrintings(data?.items ?? [], known), [data, known]);
   const pockets = useMemo(() => pocketsOf(cards, owned), [cards, owned]);
+  // Printings only promos come in (a grand master set's last pages), so their pockets can say so.
+  const promos = useMemo(
+    () => (catalog ? promosOf(catalog, cards.flatMap((c) => catalog.byId.get(c.cardId) ?? [])) : new Set<string>()),
+    [catalog, cards],
+  );
 
   if (error || !binder) {
     return (
@@ -182,7 +189,7 @@ export function BinderPage({ id }: { id: string }) {
                   </h2>
                   <div className="pockets" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
                     {page.map((p, j) => (
-                      <PocketView key={j} pocket={p} card={card(p.cardId)} />
+                      <PocketView key={j} pocket={p} card={card(p.cardId)} promo={isPromoPrinting(promos, p.cardId, p.variant)} />
                     ))}
                     {Array.from({ length: perPage - page.length }, (_, j) => (
                       <div key={`empty-${j}`} className="pocket spare" aria-hidden="true" />
@@ -204,8 +211,8 @@ export function BinderPage({ id }: { id: string }) {
   );
 }
 
-function PocketView({ pocket, card }: { pocket: Pocket; card: CatalogCard | undefined }) {
-  const note = printingNote(pocket.variant);
+function PocketView({ pocket, card, promo }: { pocket: Pocket; card: CatalogCard | undefined; promo: boolean }) {
+  const note = `${printingNote(pocket.variant)}${promo ? ' · promo' : ''}`;
   const name = card?.name ?? pocket.cardId;
   return (
     <a

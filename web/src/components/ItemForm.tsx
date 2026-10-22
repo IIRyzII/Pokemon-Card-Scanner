@@ -13,6 +13,7 @@ import {
 } from '../../../shared/grading.ts';
 import { CURRENCIES } from '../../../shared/currency.ts';
 import { DEFAULT_LANGUAGE, LANGUAGES, LANGUAGE_CODES } from '../../../shared/languages.ts';
+import { printingOrder } from '../../../shared/printings.ts';
 import type { ItemFields } from '../../../shared/types.ts';
 import { useCurrency } from '../lib/currency.tsx';
 
@@ -44,7 +45,8 @@ export function ItemForm({ value, onChange, variants }: Props) {
   const set = (patch: Partial<ItemFields>) => onChange({ ...value, ...patch });
   const graded = value.grader !== 'RAW';
   const labels = GRADE_LABELS[value.grader as Grader] ?? [];
-  const printings = variants.includes(value.variant) ? variants : [...variants, value.variant];
+  const offered = printingOrder(variants);
+  const printings = offered.includes(value.variant) ? offered : [...offered, value.variant];
 
   return (
     <div className="form">

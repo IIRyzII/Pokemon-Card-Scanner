@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fixPrinting, inferPrintings, preferPrintings } from './printings.ts';
+import { fixPrinting, inferPrintings, preferPrintings, printingOrder } from './printings.ts';
 
 const lostThunder = (name: string, rarity: string) => inferPrintings({ setId: 'sm8', name, rarity });
 
@@ -46,6 +46,13 @@ test('a printing a card does not come in is taken as its main one', () => {
 test("adding a card offers the catalog's printings first, then the rest the API allows", () => {
   assert.deepEqual(preferPrintings(['normal', 'holo', 'reverse', 'firstEdition'], ['holo']), ['holo', 'normal', 'reverse', 'firstEdition']);
   assert.deepEqual(preferPrintings(['normal', 'reverse'], ['normal', 'reverse']), ['normal', 'reverse']);
-  assert.deepEqual(preferPrintings(['holo', 'reverse'], null), ['holo', 'reverse']);
+  assert.deepEqual(preferPrintings(['holo', 'reverse'], null), ['reverse', 'holo'], 'a holo-and-reverse card offers the reverse holo first');
   assert.deepEqual(preferPrintings(['normal'], ['holo']), ['normal'], 'only what the API accepts');
+});
+
+test('a card that only comes as a holo and a reverse holo lists the reverse holo first', () => {
+  assert.deepEqual(printingOrder(['holo', 'reverse']), ['reverse', 'holo']);
+  assert.deepEqual(printingOrder(['normal', 'reverse']), ['normal', 'reverse']);
+  assert.deepEqual(printingOrder(['normal', 'holo', 'reverse']), ['normal', 'holo', 'reverse'], 'only when those are its only two');
+  assert.deepEqual(printingOrder(['holo']), ['holo']);
 });

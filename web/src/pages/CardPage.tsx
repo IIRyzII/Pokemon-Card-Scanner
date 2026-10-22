@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { cardNumberText } from '../../../shared/links.ts';
+import { printingOrder } from '../../../shared/printings.ts';
 import { hasRole, type CardDetailResponse } from '../../../shared/types.ts';
 import { AddToCollection } from '../components/AddToCollection.tsx';
 import { CardImage } from '../components/CardImage.tsx';
@@ -86,7 +87,7 @@ export function CardPage({ cardId }: { cardId: string }) {
                 .filter(Boolean)
                 .join(' · ')}
               <br />
-              Printings: {card.variants.map(variantLabel).join(', ')}
+              Printings: {printingOrder(card.variants).map(variantLabel).join(', ')}
             </p>
           )}
 

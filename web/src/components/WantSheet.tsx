@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BINDER_COLOURS } from '../../../shared/binders.ts';
 import { cardNumberText, cardmarketSearchUrl, ebayBuyUrl, ebaySoldUrl, tcgplayerUrl } from '../../../shared/links.ts';
-import { fixPrinting } from '../../../shared/printings.ts';
+import { fixPrinting, printingOrder } from '../../../shared/printings.ts';
 import { hasRole, type CardDetailResponse } from '../../../shared/types.ts';
 import { DEFAULT_PRIORITY, MAX_WANT_QUANTITY, PRIORITY_VALUES, WANT_PRIORITIES } from '../../../shared/wants.ts';
 import { api } from '../lib/api.ts';
@@ -46,7 +46,7 @@ export function WantSheet({ cardId, variant: startVariant, entry, onClose }: Pro
   const canEdit = hasRole(user?.role, 'editor');
   const card = catalog?.byId.get(cardId);
   const mine = byCard.get(cardId) ?? [];
-  const printings: string[] = card?.variants?.length ? card.variants : ['normal'];
+  const printings: string[] = card?.variants?.length ? printingOrder(card.variants) : ['normal'];
   const [variant, setVariant] = useState(startVariant ?? mine[0]?.variant ?? printings[0]);
   const existing = mine.find((w) => w.variant === variant) ?? null;
 

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { languageLabel } from '../../../shared/languages.ts';
 import { cardNumberText } from '../../../shared/links.ts';
-import { preferPrintings } from '../../../shared/printings.ts';
+import { preferPrintings, printingOrder } from '../../../shared/printings.ts';
 import type { CardDetailResponse, ItemFields } from '../../../shared/types.ts';
 import { valueItem } from '../../../shared/values.ts';
 import { CardImage } from '../components/CardImage.tsx';
@@ -82,7 +82,7 @@ export function ScanListPanel() {
   /** The printings an entry can be split into: the catalog's (known or worked out), else the API's. */
   const printingsOf = (e: ListEntry) => {
     const known = catalog?.byId.get(e.card.id)?.variants;
-    const all = known?.length ? [...known] : (e.variants ?? []);
+    const all = printingOrder(known?.length ? known : (e.variants ?? []));
     return all.includes(e.fields.variant) ? all : [e.fields.variant, ...all];
   };
 

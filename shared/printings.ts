@@ -29,10 +29,20 @@ export function fixPrinting(variant: string, known: readonly string[] | null | u
   return known?.length && !known.includes(variant) ? known[0] : variant;
 }
 
+/**
+ * The order printings are offered in (and the first one picked): as they come, except that a card
+ * that only comes as a holo and a reverse holo offers the reverse holo first. (Regular cards offer
+ * Regular, then Reverse Holo; holo-and-reverse cards read Reverse Holo, then Holo.)
+ */
+export function printingOrder<T extends string>(printings: readonly T[]): T[] {
+  const holoAndReverse = printings.length === 2 && printings.includes('holo' as T) && printings.includes('reverse' as T);
+  return holoAndReverse ? (['reverse', 'holo'] as T[]) : [...printings];
+}
+
 /** The printings to offer when adding a card: the catalog's (best guess first), then any others the API allows. */
 export function preferPrintings(allowed: readonly string[], preferred: readonly string[] | null | undefined): string[] {
   const first = (preferred ?? []).filter((v) => allowed.includes(v));
-  return [...first, ...allowed.filter((v) => !first.includes(v))];
+  return printingOrder([...first, ...allowed.filter((v) => !first.includes(v))]);
 }
 
 export function inferPrintings({ setId, name, rarity }: PrintingInput): Variant[] {
