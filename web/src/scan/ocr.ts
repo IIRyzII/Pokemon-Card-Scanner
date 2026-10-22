@@ -188,16 +188,18 @@ async function readCard(worker: Worker, card: HTMLCanvasElement, { onProgress, s
   // Newer cards first (bottom-left); the bottom-right corner only if the number wasn't there.
   // (Read as one block: sparse-text mode skips the number when it sits between the set symbol
   // and the boxed regulation mark.) Very small print, from a card far from the camera, can come
-  // out better with the single threshold, so the corners get a second go with that.
+  // out better with the single threshold, so the corners get a second go with that. A retry keeps
+  // going until it reads a whole number: a guess (a slashless "2202" → 2/202) can be other print
+  // misread, like the copyright line's.
   for (const threshold of ['2', '0']) {
     await worker.setParameters({ thresholding_method: threshold });
     for (const box of [NUMBER_LEFT, NUMBER_RIGHT]) {
       await read(fitted ? box : loose(box));
       if (guess.number) break;
     }
-    if (guess.number || guess.alternatives?.length) break;
+    if (guess.number || (guess.alternatives?.length && !retry)) break;
   }
-  if (retry && fitted && !guess.number && !guess.alternatives?.length) {
+  if (retry && fitted && !guess.number) {
     // No luck a moment ago either: this time also try the corners taller, as sparse text.
     await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, thresholding_method: '0' });
     for (const box of [NUMBER_LEFT_TALL, NUMBER_RIGHT_TALL]) {

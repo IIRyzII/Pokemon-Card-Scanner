@@ -4,8 +4,9 @@
 import type { Catalog } from '../lib/catalog.ts';
 import { identifyCard, matchConfidence, type Candidate, type Confidence, type ScanGuess } from '../lib/match.ts';
 import { matchCardPicture, type PictureLook, type PictureMatch, type PictureVerdict, type PrintIndex } from '../lib/pictures.ts';
-import type { Straightened } from './locate.ts';
-import { toCanvas } from './locate.ts';
+import type { Corners } from './detect.ts';
+import type { Located, Straightened } from './locate.ts';
+import { smallCard, toCanvas } from './locate.ts';
 import { releaseCanvas, scanCard, type ScanOptions, type ScanResult } from './ocr.ts';
 import { cropMargins, rotate180, type Rgba } from './warp.ts';
 
@@ -30,10 +31,46 @@ const px = (img: Rgba) => ({ data: img.data, width: img.width, height: img.heigh
  * sleeve, inside the margins sleeves leave). `upright`: the card as matched, the right way up and
  * cut out of its sleeve, for reading and showing.
  */
-export function matchPicture(index: PrintIndex, card: Rgba): PictureLook & { upright: Rgba } {
+export function matchPicture(index: PrintIndex, card: Rgba, sleeves = true): PictureLook & { upright: Rgba } {
   const turned = rotate180(card);
-  const look = matchCardPicture(index, px(card), px(turned));
+  const look = matchCardPicture(index, px(card), px(turned), sleeves);
   return { ...look, upright: cropMargins(look.flipped ? turned : card, look.margins) };
+}
+
+/** Other outlines tried, edge to edge, when the picture in the first one isn't clear… */
+const OTHER_OUTLINES = 6;
+/** …and the closest few of those again, inside the margins sleeves leave. */
+const SLEEVED_OUTLINES = 3;
+
+const closest = (look: PictureLook) => look.matches[0]?.distance ?? Infinity;
+
+/**
+ * The card's picture in the outline found — and, when that isn't clear, in the other outlines
+ * found, keeping whichever matches closest. A card in a binder page sits among other edges (its
+ * pocket's seams, the cards next to it), and the most card-like outline is often its pocket, or
+ * reaches across to a neighbour. (Tested on simulated binder pages: cards found went from 13% to
+ * 58%; with sleeved and bare cards a little better too, and nothing picked from outlines found
+ * in the wrong place.) `corners`: the outline it matched in, in the source's pixels.
+ */
+export function matchLocated(index: PrintIndex, found: Located): PictureLook & { upright: Rgba; corners: Corners } {
+  let best = { ...matchPicture(index, smallCard(found)), corners: found.corners };
+  if (best.picture?.clear) return best;
+  const tried = found.others.slice(0, OTHER_OUTLINES).map((corners, i) => {
+    const card = smallCard(found, found.smallOthers[i]);
+    return { card, look: { ...matchPicture(index, card, false), corners } };
+  });
+  for (const { look } of tried) if (closest(look) < closest(best)) best = look;
+  if (best.picture?.clear) return best;
+  for (const { card, look } of tried.sort((a, b) => closest(a.look) - closest(b.look)).slice(0, SLEEVED_OUTLINES)) {
+    const sleeved = { ...matchPicture(index, card), corners: look.corners };
+    if (closest(sleeved) < closest(best)) best = sleeved;
+  }
+  return best;
+}
+
+/** The outline the card is in, of those found: the one its picture matches best (without pictures, the most card-like). */
+export function cardOutline(index: PrintIndex | null, found: Located): Corners {
+  return index ? matchLocated(index, found).corners : found.corners;
 }
 
 /**

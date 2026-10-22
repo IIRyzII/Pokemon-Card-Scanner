@@ -57,6 +57,33 @@ test('finds a yellow-bordered card on white paper (by colour, not brightness)', 
   assert.ok(error(found.corners, tilted) < 4, `corners off by ${error(found.corners, tilted).toFixed(1)}px`);
 });
 
+test('offers the card itself when the most card-like outline is its binder pocket', () => {
+  const card: Corners = [
+    { x: 80, y: 90 },
+    { x: 224, y: 90 },
+    { x: 224, y: 291 },
+    { x: 80, y: 291 },
+  ];
+  const img = scene(card, { bg: [20, 20, 22], border: [235, 200, 60], art: [60, 110, 160] }, 3);
+  // The pocket's welded seams: a thin light line a little way round the card, slid to its bottom.
+  const seam = (x: number, y: number) => img.data.set([200, 200, 205], (y * W + x) * 4);
+  for (let t = 0; t < 2; t++) {
+    for (let x = 70; x <= 234; x++) {
+      seam(x, 70 + t);
+      seam(x, 299 + t);
+    }
+    for (let y = 70; y <= 300; y++) {
+      seam(70 + t, y);
+      seam(233 + t, y);
+    }
+  }
+  const found = detectCard(img);
+  assert.ok(found, 'no card found');
+  const outlines = [found.corners, ...found.others];
+  const best = Math.min(...outlines.map((o) => error(o, card)));
+  assert.ok(best < 4, `card's own outline off by ${best.toFixed(1)}px`);
+});
+
 test('finds nothing in an empty scene', () => {
   const empty: Corners = [
     { x: -10, y: -10 },

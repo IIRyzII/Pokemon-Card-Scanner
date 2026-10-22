@@ -20,6 +20,8 @@ export interface Detection {
   corners: Corners;
   /** 0–1: how much of the outline has a clear edge along it */
   score: number;
+  /** Other outlines that could be the card, most card-like first */
+  others: Corners[];
 }
 
 export const CARD_ASPECT = 63 / 88; // width / height
@@ -30,6 +32,7 @@ const N_ANGLES = Math.round((2 * MAX_TILT) / STEP) + 1;
 const EDGE_MIN = 30; // weakest edge (Sobel magnitude on 0–255 values) that counts at all
 const STRONG_EDGE = 150; // edges this strong or stronger get a full vote
 const AREA_WEIGHT = 0.6; // between nested outlines, how much the larger one is preferred
+const DISTINCT = 0.01; // outlines whose corners are further apart than this (share of the card's height) are different
 
 interface Line {
   /** 'v' lines: x·cos φ + y·sin φ = ρ; 'h' lines: −x·sin φ + y·cos φ = ρ */
@@ -62,7 +65,8 @@ function blur(src: ArrayLike<number>, w: number, h: number): Float32Array {
   return out;
 }
 
-export function detectCard(img: Image): Detection | null {
+/** `limit`: how many other outlines to offer besides the most card-like one. */
+export function detectCard(img: Image, limit = 6): Detection | null {
   const W = img.width;
   const H = img.height;
   // Edges in colour, not just brightness: a yellow border on white paper is nearly as bright as
@@ -211,8 +215,18 @@ export function detectCard(img: Image): Detection | null {
   const margin = 0.03 * Math.max(W, H);
   const inside = (p: Point) => p.x >= -margin && p.y >= -margin && p.x <= W + margin && p.y <= H + margin;
 
-  let pick: { left: Line; right: Line; top: Line; bottom: Line; mean: number } | null = null;
-  let bestScore = -Infinity;
+  interface Pick {
+    left: Line;
+    right: Line;
+    top: Line;
+    bottom: Line;
+    mean: number;
+    /** How well-outlined and card-shaped it is */
+    edges: number;
+    /** …and how big (between nested outlines, the larger is more likely the card) */
+    score: number;
+  }
+  const picks: Pick[] = [];
   for (let i = 0; i < vLines.length; i++) {
     for (let j = i + 1; j < vLines.length; j++) {
       const left = vLines[i];
@@ -241,48 +255,78 @@ export function detectCard(img: Image): Detection | null {
           const mean = (sides[0] + sides[1] + sides[2] + sides[3]) / 4;
           // Prefer well-outlined, card-shaped and (between nested outlines, e.g. the card's own
           // inner border) the larger rectangle.
-          const score = mean + 0.25 * weakest + AREA_WEIGHT * ((w * h) / (W * H)) - 0.8 * Math.abs(aspect - CARD_ASPECT);
-          if (score > bestScore) {
-            bestScore = score;
-            pick = { left, right, top, bottom, mean };
-          }
+          const edges = mean + 0.25 * weakest - 0.8 * Math.abs(aspect - CARD_ASPECT);
+          picks.push({ left, right, top, bottom, mean, edges, score: edges + AREA_WEIGHT * ((w * h) / (W * H)) });
         }
       }
     }
   }
-  if (!pick || pick.mean < 0.35) return null;
+  picks.sort((a, b) => b.score - a.score);
+  if (!picks.length || picks[0].mean < 0.35) return null;
 
   // The card's printed border makes a second outline just inside its real edge, and a side can
   // lock onto that instead. Push each side out to the outermost nearly-parallel edge close by.
   const position = (line: Line, vertical: boolean, t: number) =>
     vertical ? (line.rho - t * Math.sin(line.phi)) / Math.cos(line.phi) : (line.rho + t * Math.sin(line.phi)) / Math.cos(line.phi);
-  for (let pass = 0; pass < 2; pass++) {
-    for (const side of ['left', 'right', 'top', 'bottom'] as const) {
-      const vertical = side === 'left' || side === 'right';
-      const outward = side === 'left' || side === 'top' ? -1 : 1;
-      const current = pick[side];
-      const tl = meet(pick.left, pick.top);
-      const br = meet(pick.right, pick.bottom);
-      const cardHeight = br.y - tl.y;
-      const middle = vertical ? (tl.y + br.y) / 2 : (tl.x + br.x) / 2;
-      let outer: Line | null = null;
-      let outerGap = 0;
-      for (const line of vertical ? vLines : hLines) {
-        if (line === current || Math.abs(line.phi - current.phi) > 3 * STEP) continue;
-        const gap = (position(line, vertical, middle) - position(current, vertical, middle)) * outward;
-        if (gap < 0.008 * cardHeight || gap > 0.08 * cardHeight || gap <= outerGap) continue;
-        const span = vertical ? [meet(line, pick.top).y, meet(line, pick.bottom).y] : [meet(pick.left, line).x, meet(pick.right, line).x];
-        if (support(line, span[0], span[1]) >= 0.45) {
-          outer = line;
-          outerGap = gap;
+  const pushOut = (found: Pick): Pick => {
+    const pick = { ...found };
+    for (let pass = 0; pass < 2; pass++) {
+      for (const side of ['left', 'right', 'top', 'bottom'] as const) {
+        const vertical = side === 'left' || side === 'right';
+        const outward = side === 'left' || side === 'top' ? -1 : 1;
+        const current = pick[side];
+        const tl = meet(pick.left, pick.top);
+        const br = meet(pick.right, pick.bottom);
+        const cardHeight = br.y - tl.y;
+        const middle = vertical ? (tl.y + br.y) / 2 : (tl.x + br.x) / 2;
+        let outer: Line | null = null;
+        let outerGap = 0;
+        for (const line of vertical ? vLines : hLines) {
+          if (line === current || Math.abs(line.phi - current.phi) > 3 * STEP) continue;
+          const gap = (position(line, vertical, middle) - position(current, vertical, middle)) * outward;
+          if (gap < 0.008 * cardHeight || gap > 0.08 * cardHeight || gap <= outerGap) continue;
+          const span = vertical ? [meet(line, pick.top).y, meet(line, pick.bottom).y] : [meet(pick.left, line).x, meet(pick.right, line).x];
+          if (support(line, span[0], span[1]) >= 0.45) {
+            outer = line;
+            outerGap = gap;
+          }
         }
+        if (outer) pick[side] = outer;
       }
-      if (outer) pick[side] = outer;
     }
-  }
-  const corners: Corners = [meet(pick.left, pick.top), meet(pick.right, pick.top), meet(pick.right, pick.bottom), meet(pick.left, pick.bottom)];
+    return pick;
+  };
+  const cornersOf = (p: Pick): Corners => [meet(p.left, p.top), meet(p.right, p.top), meet(p.right, p.bottom), meet(p.left, p.bottom)];
+
+  const best = pushOut(picks[0]);
+  const corners = cornersOf(best);
   if (!corners.every(inside)) return null;
-  return { corners, score: pick.mean };
+  // Other outlines that could be the card, for when the picture inside this one matches nothing:
+  // a card in a binder page sits among other edges (its pocket's seams, the cards next to it), and
+  // the most card-like rectangle can be its pocket, or reach across to a neighbour's edge. Ranked
+  // by their edges alone (size is what misleads there), each as found and pushed out.
+  const others: Corners[] = [];
+  const taken = [corners];
+  const offer = (c: Corners) => {
+    if (others.length < limit && c.every(inside) && taken.every((t) => apart(t, c) > DISTINCT)) {
+      taken.push(c);
+      others.push(c);
+    }
+  };
+  offer(cornersOf(picks[0]));
+  for (const p of picks.sort((a, b) => b.edges - a.edges)) {
+    if (others.length >= limit) break;
+    if (p.mean < 0.35) continue;
+    offer(cornersOf(p));
+    offer(cornersOf(pushOut(p)));
+  }
+  return { corners, score: best.mean, others };
+}
+
+/** Average distance between two outlines' corners, as a share of the first one's height. */
+function apart(a: Corners, b: Corners): number {
+  const height = Math.hypot(a[0].x - a[3].x, a[0].y - a[3].y) || 1;
+  return a.reduce((sum, p, i) => sum + Math.hypot(p.x - b[i].x, p.y - b[i].y), 0) / 4 / height;
 }
 
 /** Area-averaged copy of RGBA pixels, `scale` times the size (e.g. 0.25). */

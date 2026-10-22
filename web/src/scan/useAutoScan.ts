@@ -10,10 +10,10 @@ import { nameMatch, type ScanGuess } from '../lib/match.ts';
 import { CERTAIN, LOOKS, settleOverLooks, type PictureMatch } from '../lib/pictures.ts';
 import { loadPrintIndex } from '../lib/useCatalog.ts';
 import type { Corners, Point } from './detect.ts';
-import { cornerShift, locateCard, smallCard, straightenCard, toCanvas, toElement } from './locate.ts';
+import { cornerShift, locateCard, straightenCard, toCanvas, toElement } from './locate.ts';
 import { frameChange, snapshot } from './motion.ts';
 import { captureFrame, frameCrop, releaseCanvas, warmUpOcr } from './ocr.ts';
-import { matchPicture, readCard, readingFromPicture, type Reading } from './recognize.ts';
+import { matchLocated, readCard, readingFromPicture, type Reading } from './recognize.ts';
 
 export type AutoStatus =
   | { state: 'loading' }
@@ -136,7 +136,10 @@ export function useAutoScan({ active, catalog, video, frame, onFound, keepGoing 
         if (detection) {
           snap = null;
           gone = 0;
-          const shift = corners ? cornerShift(corners, detection.corners) : 1;
+          // How far the card moved since the last look: from the outline it was in to the nearest one
+          // found now (in a binder page, the most card-like outline can change from look to look).
+          const last = corners;
+          const shift = last ? Math.min(...[detection.corners, ...detection.others].map((c) => cornerShift(last, c))) : 1;
           corners = detection.corners;
           const still = shift < STILL_ENOUGH;
           setOutline({ points: detection.corners.map((p) => toElement(v, p)), steady: still });
@@ -151,9 +154,15 @@ export function useAutoScan({ active, catalog, video, frame, onFound, keepGoing 
           if (paused) continue;
           // The text needs a sharp frame; the picture doesn't (it only uses the card's broad shapes).
           let readNow = still && performance.now() >= restUntil;
+          let outline = detection.corners; // where the card is, of the outlines found
           if (index) {
-            const small = smallCard(detection);
-            const { matches, picture, upright } = matchPicture(index, small);
+            const match = matchLocated(index, detection);
+            const { matches, picture, upright } = match;
+            if (match.corners !== outline) {
+              // (e.g. in a binder page: the card, not its pocket)
+              outline = corners = match.corners;
+              setOutline({ points: outline.map((p) => toElement(v, p)), steady: still });
+            }
             recent = [...recent, matches].slice(-LOOKS);
             // Settled by the picture we just matched. (Grabbing a fresh frame now could catch the card
             // somewhere else if it's moving.)
@@ -189,7 +198,7 @@ export function useAutoScan({ active, catalog, video, frame, onFound, keepGoing 
           }
           if (!reading) {
             if (!readNow) continue;
-            card = straightenCard(v, v.videoWidth, v.videoHeight, detection.corners);
+            card = straightenCard(v, v.videoWidth, v.videoHeight, outline);
           }
         } else {
           // No outline (e.g. a white card on a white table): read the guide frame once the view is steady.

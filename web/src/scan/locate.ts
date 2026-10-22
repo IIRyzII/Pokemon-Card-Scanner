@@ -22,6 +22,8 @@ export interface Located extends Detection {
   small: ImageData;
   /** The corners in `small` */
   smallCorners: Corners;
+  /** The other outlines' corners in `small` */
+  smallOthers: Corners[];
 }
 
 /** The part of the camera frame the <video> element actually shows (object-fit: cover), in video pixels. */
@@ -59,16 +61,16 @@ export function findCard(source: CanvasImageSource, region: Region): Located | n
   const pixels = ctx.getImageData(0, 0, w, SEARCH_HEIGHT);
   const found = detectCard(pixels);
   if (!found) return null;
-  const corners = found.corners.map((p) => ({ x: region.x + p.x / scale, y: region.y + p.y / scale })) as Corners;
-  return { corners, score: found.score, small: pixels, smallCorners: found.corners };
+  const toSource = (c: Corners) => c.map((p) => ({ x: region.x + p.x / scale, y: region.y + p.y / scale })) as Corners;
+  return { corners: toSource(found.corners), score: found.score, others: found.others.map(toSource), small: pixels, smallCorners: found.corners, smallOthers: found.others };
 }
 
 /**
- * A straightened copy of the card cut from the small image it was found in. Plenty for its picture
- * fingerprint (which only uses the broad shapes), and cheap enough to do on every look.
+ * A straightened copy of the card cut from the small image it was found in (`c`: another outline
+ * found in it). Plenty for its picture fingerprint (which only uses the broad shapes), and cheap
+ * enough to do on every look.
  */
-export function smallCard(found: Located): Rgba {
-  const c = found.smallCorners;
+export function smallCard(found: Located, c: Corners = found.smallCorners): Rgba {
   const height = (Math.hypot(c[0].x - c[3].x, c[0].y - c[3].y) + Math.hypot(c[1].x - c[2].x, c[1].y - c[2].y)) / 2;
   const h = Math.max(48, Math.round(height));
   return warpCard({ data: found.small.data, width: found.small.width, height: found.small.height }, c, Math.round(h * CARD_ASPECT), h);

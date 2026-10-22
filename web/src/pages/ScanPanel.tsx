@@ -16,7 +16,7 @@ import { copiesIn, listCardOf, scanList, setStackMode, stackMode, useLastAdded, 
 import { loadPrintIndex, useCatalog } from '../lib/useCatalog.ts';
 import { findCard, locateCard, straightenCard, type Straightened } from '../scan/locate.ts';
 import { captureFrame, centerCrop, loadPhoto, releaseCanvas, warmUpOcr, type ScanResult } from '../scan/ocr.ts';
-import { readCard, type Reading } from '../scan/recognize.ts';
+import { cardOutline, readCard, type Reading } from '../scan/recognize.ts';
 import { markFound, useAutoScan, type AutoStatus } from '../scan/useAutoScan.ts';
 
 type Phase = 'starting' | 'live' | 'nocamera' | 'reading' | 'results';
@@ -235,12 +235,13 @@ export function ScanPanel() {
   }
 
   /** The shutter: find the card in the current frame (or fall back to the guide frame) and read it. */
-  function shutter() {
+  async function shutter() {
     const v = video.current;
     const f = frame.current;
     if (!v || !f) return;
+    const index = await loadPrintIndex();
     const found = locateCard(v);
-    void readAndShow(found ? straightenCard(v, v.videoWidth, v.videoHeight, found.corners) : captureFrame(v, f));
+    void readAndShow(found ? straightenCard(v, v.videoWidth, v.videoHeight, cardOutline(index, found)) : captureFrame(v, f));
   }
 
   async function onFile(file: File | undefined) {
@@ -249,7 +250,7 @@ export function ScanPanel() {
     try {
       const photo = await loadPhoto(file);
       const found = findCard(photo, { x: 0, y: 0, w: photo.width, h: photo.height });
-      card = found ? straightenCard(photo, photo.width, photo.height, found.corners) : centerCrop(photo);
+      card = found ? straightenCard(photo, photo.width, photo.height, cardOutline(await loadPrintIndex(), found)) : centerCrop(photo);
       releaseCanvas(photo);
     } catch (err) {
       show(failed(`Couldn't open that photo: ${(err as Error).message}`));

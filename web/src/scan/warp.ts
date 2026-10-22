@@ -81,9 +81,14 @@ export function warpCard(src: Rgba, corners: Corners, outW: number, outH: number
 
 /** Turns an image upside down (for a card held the wrong way up). */
 export function rotate180(img: Rgba): Rgba {
-  const out = new Uint8ClampedArray(img.data.length);
-  const n = img.width * img.height;
-  for (let p = 0; p < n; p++) out.set(img.data.subarray(p * 4, p * 4 + 4), (n - 1 - p) * 4);
+  const d = img.data;
+  const out = new Uint8ClampedArray(d.length);
+  for (let p = 0, q = d.length - 4; q >= 0; p += 4, q -= 4) {
+    out[q] = d[p];
+    out[q + 1] = d[p + 1];
+    out[q + 2] = d[p + 2];
+    out[q + 3] = d[p + 3];
+  }
   return { data: out, width: img.width, height: img.height };
 }
 

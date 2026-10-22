@@ -137,16 +137,17 @@ export interface PictureLook {
 
 /**
  * What a straightened card's picture matches, trying it both ways up — and, when that isn't
- * clear, the card inside a sleeve at the margins sleeves leave, keeping whichever matches closest.
+ * clear (and `sleeves`), the card inside a sleeve at the margins sleeves leave, keeping whichever
+ * matches closest.
  */
-export function matchCardPicture(index: PrintIndex, card: Pixels & { channels: 4 }, upsideDown: Pixels & { channels: 4 }): PictureLook {
+export function matchCardPicture(index: PrintIndex, card: Pixels & { channels: 4 }, upsideDown: Pixels & { channels: 4 }, sleeves = true): PictureLook {
   const look = (margins: Margins) => {
     const { matches, flipped } = nearestEitherWay(index, cardPrintInside(card, margins), cardPrintInside(upsideDown, margins));
     return { matches, flipped, margins };
   };
   let best = look(NO_MARGINS);
   let picture = pictureVerdict(best.matches);
-  if (!picture?.clear) {
+  if (sleeves && !picture?.clear) {
     for (const margins of SLEEVE_MARGINS) {
       const l = look(margins);
       if ((l.matches[0]?.distance ?? Infinity) < (best.matches[0]?.distance ?? Infinity)) best = l;
