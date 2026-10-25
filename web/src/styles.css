@@ -1456,12 +1456,55 @@ button.tile.as-button {
 .pocket {
   display: flex;
   flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.pocket-card {
+  display: flex;
+  flex-direction: column;
   gap: 3px;
   min-width: 0;
   color: var(--text);
 }
-.pocket:hover {
+.pocket-card:hover {
   text-decoration: none;
+}
+/* − (copies) + under each card in a binder, and in its Missing list */
+.copy-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.copy-steps button {
+  flex: 0 1 auto;
+  width: 32px;
+  height: 32px;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.copy-steps button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.copy-count {
+  min-width: 1.4em;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.pocket.filled .copy-count,
+.scan-entry .copy-count {
+  color: var(--text);
+  font-weight: 700;
 }
 .pocket .card-img {
   box-shadow: none;

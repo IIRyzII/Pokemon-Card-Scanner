@@ -43,6 +43,33 @@ export function ownedPrintings(items: Pick<CollectionItem, 'cardId' | 'variant' 
   return owned;
 }
 
+/** Copies added (+1) or taken out (−1) by a binder's + and − that the collection doesn't have yet, counted in. */
+export function withPending(owned: Map<string, number>, pending: readonly { key: string; delta: number }[]): Map<string, number> {
+  if (!pending.length) return owned;
+  const out = new Map(owned);
+  for (const p of pending) out.set(p.key, Math.max(0, (out.get(p.key) ?? 0) + p.delta));
+  return out;
+}
+
+/**
+ * The copy a binder's − takes out of the collection for a card in a printing: a raw one (a slab
+ * is taken out on its own page), the one added last first. Null when there's no raw copy.
+ */
+export function copyToRemove<T extends Pick<CollectionItem, 'cardId' | 'variant' | 'grader' | 'createdAt'>>(
+  items: readonly T[],
+  cardId: string,
+  variant: string,
+  known?: KnownPrintings,
+): T | null {
+  let last: T | null = null;
+  for (const i of items) {
+    if (i.cardId !== cardId || i.grader !== 'RAW') continue;
+    if ((known ? fixPrinting(i.variant, known(i.cardId)) : i.variant) !== variant) continue;
+    if (!last || i.createdAt > last.createdAt) last = i;
+  }
+  return last;
+}
+
 /** A binder's cards, any printing a card doesn't come in taken as its main one (binders made before its printings were known). */
 export const fixBinderPrintings = (cards: BinderCard[], known: KnownPrintings): BinderCard[] =>
   cards.map((c) => {

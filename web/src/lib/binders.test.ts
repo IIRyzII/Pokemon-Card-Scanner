@@ -6,6 +6,7 @@ import {
   allPrintingsOf,
   binderCards,
   binderStats,
+  copyToRemove,
   fixBinderPrintings,
   knownPrintings,
   missingOf,
@@ -19,6 +20,7 @@ import {
   promosOf,
   setCardsOf,
   stampedPromosOf,
+  withPending,
 } from './binders.ts';
 import { buildCatalog, type CatalogCard, type CatalogJson } from './catalog.ts';
 
@@ -176,6 +178,38 @@ test('a card in a binder twice: copies fill the first place, then the next', () 
   assert.deepEqual(
     pockets.map((p) => p.filled),
     [true, true, true, false],
+  );
+});
+
+test("a binder's −: the raw copy added last, never a slab", () => {
+  const items = [
+    { id: 'a', cardId: 'sv04-032', variant: 'holo', grader: 'RAW', createdAt: '2026-01-01T10:00:00Z' },
+    { id: 'b', cardId: 'sv04-032', variant: 'holo', grader: 'RAW', createdAt: '2026-03-01T10:00:00Z' },
+    { id: 'c', cardId: 'sv04-032', variant: 'holo', grader: 'PSA', createdAt: '2026-05-01T10:00:00Z' },
+    { id: 'd', cardId: 'sv04-032', variant: 'reverse', grader: 'RAW', createdAt: '2026-06-01T10:00:00Z' },
+    { id: 'e', cardId: 'sm8-17', variant: 'normal', grader: 'RAW', createdAt: '2026-01-01T10:00:00Z' },
+  ];
+  assert.equal(copyToRemove(items, 'sv04-032', 'holo')?.id, 'b');
+  assert.equal(copyToRemove(items, 'sv04-032', 'reverse')?.id, 'd');
+  assert.equal(copyToRemove(items.slice(2, 3), 'sv04-032', 'holo'), null, 'only a slab left');
+  assert.equal(copyToRemove(items, 'sv04-032', 'holo~cosmos'), null);
+  // A Shuckle-GX saved as "normal" before its printings were known is its holo
+  assert.equal(copyToRemove(items, 'sm8-17', 'holo', (id) => (id === 'sm8-17' ? ['holo'] : null))?.id, 'e');
+});
+
+test("a binder's + and − count at once, before the collection has them", () => {
+  const owned = new Map([['a|holo', 1]]);
+  assert.equal(withPending(owned, []), owned);
+  assert.deepEqual(
+    Object.fromEntries(
+      withPending(owned, [
+        { key: 'a|holo', delta: 1 },
+        { key: 'b|normal', delta: 1 },
+        { key: 'a|holo', delta: -1 },
+        { key: 'c|reverse', delta: -1 },
+      ]),
+    ),
+    { 'a|holo': 1, 'b|normal': 1, 'c|reverse': 0 },
   );
 });
 

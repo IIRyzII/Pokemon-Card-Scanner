@@ -1,17 +1,20 @@
 // One binder as it is on the shelf, page by page: the cards you have in colour, the rest greyed
 // out, each pocket noting its printing. Or the list of what's still missing and where it goes.
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { BINDER_COLOURS, POCKET_LAYOUTS, colourOf, type Pockets } from '../../../shared/binders.ts';
 import { cardNumberText } from '../../../shared/links.ts';
-import type { Binder } from '../../../shared/types.ts';
+import type { Binder, CollectionItem } from '../../../shared/types.ts';
 import { hasRole } from '../../../shared/types.ts';
 import { CardImage } from '../components/CardImage.tsx';
+import { useFeedback } from '../components/feedback.tsx';
 import { IconBack, IconEdit } from '../components/Icons.tsx';
+import { defaultFields } from '../components/ItemForm.tsx';
 import { ProgressBar } from '../components/ProgressBar.tsx';
 import { api } from '../lib/api.ts';
 import {
   binderStats,
+  copyToRemove,
   fixBinderPrintings,
   knownPrintings,
   missingOf,
@@ -22,6 +25,8 @@ import {
   printingNote,
   promosOf,
   isPromoPrinting,
+  withPending,
+  type KnownPrintings,
   type Pocket,
 } from '../lib/binders.ts';
 import type { Catalog, CatalogCard } from '../lib/catalog.ts';
@@ -55,8 +60,9 @@ export function BinderPage({ id }: { id: string }) {
 
   // Printings a card doesn't come in (saved before they were known) count as its main one.
   const known = useMemo(() => knownPrintings(catalog), [catalog]);
+  const steps = useCopySteps(known);
   const cards = useMemo(() => (binder ? fixBinderPrintings(binder.cards, known) : []), [binder, known]);
-  const owned = useMemo(() => ownedPrintings(data?.items ?? [], known), [data, known]);
+  const owned = useMemo(() => withPending(ownedPrintings(data?.items ?? [], known), steps.pending), [data, known, steps.pending]);
   const pockets = useMemo(() => pocketsOf(cards, owned), [cards, owned]);
   // Printings only promos come in (a grand master set's last pages), so their pockets can say so.
   const promos = useMemo(
@@ -190,7 +196,14 @@ export function BinderPage({ id }: { id: string }) {
                   </h2>
                   <div className="pockets" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
                     {page.map((p, j) => (
-                      <PocketView key={j} pocket={p} card={card(p.cardId)} promo={isPromoPrinting(promos, p.cardId, p.variant) || !!card(p.cardId)?.versionOf} />
+                      <PocketView
+                        key={j}
+                        pocket={p}
+                        card={card(p.cardId)}
+                        promo={isPromoPrinting(promos, p.cardId, p.variant) || !!card(p.cardId)?.versionOf}
+                        copies={owned.get(`${p.cardId}|${p.variant}`) ?? 0}
+                        steps={canEdit ? steps : null}
+                      />
                     ))}
                     {Array.from({ length: perPage - page.length }, (_, j) => (
                       <div key={`empty-${j}`} className="pocket spare" aria-hidden="true" />
@@ -200,11 +213,19 @@ export function BinderPage({ id }: { id: string }) {
               ))}
             </div>
           ) : (
-            <MissingList missing={missing} catalog={catalog} priceOf={priceOf} format={(v) => format(v, currency)} />
+            <MissingList
+              missing={missing}
+              catalog={catalog}
+              priceOf={priceOf}
+              format={(v) => format(v, currency)}
+              owned={owned}
+              steps={canEdit ? steps : null}
+            />
           )}
           <p className="faint small center">
             A pocket is in colour when the collection has a copy of that card in that printing (any condition or grade); each copy fills one
             pocket.
+            {canEdit && ' + adds a copy (raw, near mint) to the collection and − takes one out, so you can fill the binder as you go.'}
           </p>
         </>
       )}
@@ -212,25 +233,135 @@ export function BinderPage({ id }: { id: string }) {
   );
 }
 
-function PocketView({ pocket, card, promo }: { pocket: Pocket; card: CatalogCard | undefined; promo: boolean }) {
+interface CopySteps {
+  /** Taps not in the collection yet ("card id|printing", +1 or −1) */
+  pending: { key: string; delta: number }[];
+  add: (cardId: string, variant: string) => void;
+  remove: (cardId: string, variant: string) => void;
+}
+
+/**
+ * The + and − by each card: a copy of it in that printing into the collection (raw, near mint, as
+ * adding one starts out), or the raw copy added last out of it (to the trash, like removing it on
+ * its own page). Pockets change as soon as they're tapped; the taps are sent one after another,
+ * then the collection is fetched again.
+ */
+function useCopySteps(known: KnownPrintings): CopySteps {
+  const { data, reload } = useCollection();
+  const { currency } = useCurrency();
+  const { toast } = useFeedback();
+  const [pending, setPending] = useState<{ id: number; key: string; delta: number }[]>([]);
+  // The collection as the taps so far have left it, for which copy a − takes out
+  const items = useRef<CollectionItem[]>([]);
+  const queue = useRef(Promise.resolve());
+  const waiting = useRef(0);
+  const sent = useRef(new Set<number>());
+  const nextId = useRef(0);
+  useEffect(() => {
+    if (!waiting.current) items.current = data?.items ?? [];
+  }, [data]);
+
+  const run = (cardId: string, variant: string, delta: 1 | -1, send: () => Promise<void>) => {
+    const id = nextId.current++;
+    setPending((p) => [...p, { id, key: `${cardId}|${variant}`, delta }]);
+    waiting.current++;
+    queue.current = queue.current
+      .then(send)
+      .then(
+        () => void sent.current.add(id),
+        (err: Error) => {
+          setPending((p) => p.filter((c) => c.id !== id));
+          toast(err.message, 'error');
+        },
+      )
+      .then(async () => {
+        if (--waiting.current) return;
+        const settled = new Set(sent.current);
+        sent.current.clear();
+        await reload();
+        setPending((p) => p.filter((c) => !settled.has(c.id)));
+      });
+  };
+
+  return {
+    pending,
+    add: (cardId, variant) =>
+      run(cardId, variant, 1, async () => {
+        const { item } = await api.addItem({ cardId, ...defaultFields([variant], currency) });
+        items.current = [...items.current.filter((i) => i.id !== item.id), item];
+      }),
+    remove: (cardId, variant) => {
+      // (While taps are being sent, the copy may be one just added: the − waits its turn.)
+      if (!waiting.current && !copyToRemove(items.current, cardId, variant, known)) {
+        toast('Only graded copies of it are left: take a slab out on its own page', 'error');
+        return;
+      }
+      run(cardId, variant, -1, async () => {
+        const copy = copyToRemove(items.current, cardId, variant, known);
+        if (!copy) throw new Error('There’s no raw copy of it left to take out');
+        if (copy.quantity > 1) {
+          const { item } = await api.updateItem(copy.id, { quantity: copy.quantity - 1 });
+          items.current = items.current.map((i) => (i.id === item.id ? item : i));
+        } else {
+          await api.removeItem(copy.id);
+          items.current = items.current.filter((i) => i.id !== copy.id);
+        }
+      });
+    },
+  };
+}
+
+/** − (count) + for a card in a printing */
+function CopyStepper({ cardId, variant, name, copies, steps }: { cardId: string; variant: string; name: string; copies: number; steps: CopySteps }) {
+  const label = `${name} (${printingNote(variant)})`;
+  return (
+    <div className="copy-steps">
+      <button type="button" onClick={() => steps.remove(cardId, variant)} disabled={!copies} aria-label={`Take a ${label} out of the collection`}>
+        −
+      </button>
+      <span className="copy-count" title="Copies in the collection">
+        {copies}
+        <span className="sr-only"> in the collection</span>
+      </span>
+      <button type="button" onClick={() => steps.add(cardId, variant)} aria-label={`Add a ${label} to the collection`}>
+        +
+      </button>
+    </div>
+  );
+}
+
+interface PocketProps {
+  pocket: Pocket;
+  card: CatalogCard | undefined;
+  promo: boolean;
+  /** Copies the collection has of its card in its printing */
+  copies: number;
+  /** The + and − (editors) */
+  steps: CopySteps | null;
+}
+
+function PocketView({ pocket, card, promo, copies, steps }: PocketProps) {
   const note = `${printingNote(pocket.variant)}${promo ? ' · promo' : ''}`;
   const name = card?.name ?? pocket.cardId;
   return (
-    <a
-      className={`pocket${pocket.filled ? ' filled' : ''}`}
-      href={href('card', pocket.cardId)}
-      title={`${name}${card ? ` · ${card.set.name} #${numberOf(card)}` : ''} · ${note}${pocket.filled ? '' : ' (missing)'}`}
-    >
-      <CardImage base={card?.image} name={name} setId={card?.set.id} number={card?.number} />
-      <span className="pocket-note">
-        {/* A stamped promo card from the promo set: "SVP #057", not the set's own #057 */}
-        <span className="faint">
-          {card?.versionOf && card.set.code ? `${card.set.code} ` : ''}#{card?.number ?? '?'}
-        </span>{' '}
-        {note}
-      </span>
-      <span className="sr-only">{pocket.filled ? 'You have it' : 'Missing'}</span>
-    </a>
+    <div className={`pocket${pocket.filled ? ' filled' : ''}`}>
+      <a
+        className="pocket-card"
+        href={href('card', pocket.cardId)}
+        title={`${name}${card ? ` · ${card.set.name} #${numberOf(card)}` : ''} · ${note}${pocket.filled ? '' : ' (missing)'}`}
+      >
+        <CardImage base={card?.image} name={name} setId={card?.set.id} number={card?.number} />
+        <span className="pocket-note">
+          {/* A stamped promo card from the promo set: "SVP #057", not the set's own #057 */}
+          <span className="faint">
+            {card?.versionOf && card.set.code ? `${card.set.code} ` : ''}#{card?.number ?? '?'}
+          </span>{' '}
+          {note}
+        </span>
+        <span className="sr-only">{pocket.filled ? 'You have it' : 'Missing'}</span>
+      </a>
+      {steps && <CopyStepper cardId={pocket.cardId} variant={pocket.variant} name={name} copies={copies} steps={steps} />}
+    </div>
   );
 }
 
@@ -239,9 +370,11 @@ interface MissingProps {
   catalog: Catalog | null;
   priceOf: (card: CatalogCard) => number | null;
   format: (v: number) => string;
+  owned: Map<string, number>;
+  steps: CopySteps | null;
 }
 
-function MissingList({ missing, catalog, priceOf, format }: MissingProps) {
+function MissingList({ missing, catalog, priceOf, format, owned, steps }: MissingProps) {
   if (!missing.length) return <p className="muted center">Nothing missing: every pocket is filled.</p>;
   return (
     <ul className="scan-list">
@@ -267,6 +400,17 @@ function MissingList({ missing, catalog, priceOf, format }: MissingProps) {
                 {printingNote(m.variant)} · page {m.page}, pocket {m.pocket}
                 {price !== null && <span className="faint"> · about {format(price)} each</span>}
               </div>
+              {steps && (
+                <div className="scan-entry-actions">
+                  <CopyStepper
+                    cardId={m.cardId}
+                    variant={m.variant}
+                    name={card?.name ?? m.cardId}
+                    copies={owned.get(`${m.cardId}|${m.variant}`) ?? 0}
+                    steps={steps}
+                  />
+                </div>
+              )}
             </div>
           </li>
         );
