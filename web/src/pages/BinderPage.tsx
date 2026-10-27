@@ -8,8 +8,9 @@ import type { Binder, CollectionItem } from '../../../shared/types.ts';
 import { hasRole } from '../../../shared/types.ts';
 import { CardImage } from '../components/CardImage.tsx';
 import { useFeedback } from '../components/feedback.tsx';
-import { IconBack, IconEdit } from '../components/Icons.tsx';
+import { IconBack, IconCamera, IconEdit } from '../components/Icons.tsx';
 import { defaultFields } from '../components/ItemForm.tsx';
+import { PageScanner } from '../components/PageScanner.tsx';
 import { ProgressBar } from '../components/ProgressBar.tsx';
 import { api } from '../lib/api.ts';
 import {
@@ -49,7 +50,10 @@ export function BinderPage({ id }: { id: string }) {
   const [binder, setBinder] = useState<Binder | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<'pages' | 'missing'>('pages');
+  /** The page being scanned (0-based) */
+  const [scanning, setScanning] = useState<number | null>(null);
   const canEdit = hasRole(user?.role, 'editor');
+  const { toast } = useFeedback();
 
   useEffect(() => {
     api.binder(id).then(
@@ -190,8 +194,15 @@ export function BinderPage({ id }: { id: string }) {
                 <section key={i} id={`page-${i + 1}`} className="binder-page" aria-label={`Page ${i + 1}`}>
                   <h2 className="binder-page-no">
                     Page {i + 1}
-                    <span className="faint">
-                      {page.filter((p) => p.filled).length}/{page.length}
+                    <span className="binder-page-tools">
+                      <span className="faint">
+                        {page.filter((p) => p.filled).length}/{page.length}
+                      </span>
+                      {canEdit && page.some((p) => !p.filled) && (
+                        <button type="button" className="btn small" onClick={() => setScanning(i)} aria-label={`Scan page ${i + 1}`}>
+                          <IconCamera width={15} height={15} /> Scan
+                        </button>
+                      )}
                     </span>
                   </h2>
                   <div className="pockets" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
@@ -222,9 +233,24 @@ export function BinderPage({ id }: { id: string }) {
               steps={canEdit ? steps : null}
             />
           )}
+          {scanning !== null && pages[scanning] && (
+            <PageScanner
+              pageNo={scanning + 1}
+              cols={columns}
+              rows={Math.ceil(perPage / columns)}
+              pockets={pages[scanning]}
+              cardOf={card}
+              onAdd={(found) => {
+                for (const p of found) steps.add(p.cardId, p.variant);
+                toast(`Adding ${found.length} card${found.length === 1 ? '' : 's'} from page ${scanning + 1}`);
+              }}
+              onClose={() => setScanning(null)}
+            />
+          )}
           <p className="faint small center">
             A pocket is in colour when the collection has a copy of that card in that printing (any condition or grade); each copy fills one
             pocket.
+            {canEdit && ' Scan on a page checks a photo of the real page and fills the pockets it finds.'}
             {canEdit && ' + adds a copy (raw, near mint) to the collection and − takes one out, so you can fill the binder as you go.'}
           </p>
         </>
