@@ -7,6 +7,7 @@ import { CardImage } from '../components/CardImage.tsx';
 import { variantLabel } from '../components/CardTile.tsx';
 import { IconCamera, IconImage } from '../components/Icons.tsx';
 import { defaultFields } from '../components/ItemForm.tsx';
+import { PageReader } from '../components/PageScanner.tsx';
 import { allPrintingsOf } from '../lib/binders.ts';
 import type { CatalogCard } from '../lib/catalog.ts';
 import { useCurrency } from '../lib/currency.tsx';
@@ -287,6 +288,19 @@ export function ScanPanel() {
     setFound(null);
   }
 
+  /** A whole binder page at once: its own camera, so this one stops (and auto-scan with it) meanwhile. */
+  const [paging, setPaging] = useState(false);
+  function openPage() {
+    stopCamera();
+    setFound(null);
+    setPhase('starting');
+    setPaging(true);
+  }
+  function closePage() {
+    setPaging(false);
+    if (mounted.current) void startCamera();
+  }
+
   function scanAgain() {
     lastResults = null;
     markHistory(false);
@@ -328,6 +342,7 @@ export function ScanPanel() {
   return (
     <div className={`scan${stack ? ' stacking' : ''}`}>
       {catalogError && <p className="error">{catalogError}</p>}
+      {paging && <PageReader onClose={closePage} />}
       <input
         ref={fileInput}
         type="file"
@@ -348,6 +363,9 @@ export function ScanPanel() {
             </button>
             <button type="button" className={stack ? 'on' : ''} aria-pressed={stack} onClick={() => chooseStack(true)}>
               Stack of cards
+            </button>
+            <button type="button" aria-pressed={paging} onClick={openPage}>
+              Binder page
             </button>
           </div>
           <div className={`viewfinder${outline ? ' has-card' : ''}`}>

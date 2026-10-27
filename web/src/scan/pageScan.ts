@@ -5,7 +5,18 @@
 
 import { cardPrintInside, NO_MARGINS, PRINT_WORDS, hamming, type Margins } from '../../../shared/cardprint.ts';
 import type { CatalogCard } from '../lib/catalog.ts';
-import { CLEAR, SLEEVE_MARGINS, STEADY_CLOSE, TWIN, nearestEitherWay, pictureVerdict, type PictureMatch, type PrintIndex } from '../lib/pictures.ts';
+import {
+  CLEAR,
+  SLEEVE_MARGINS,
+  STEADY_CLOSE,
+  TWIN,
+  matchCardPicture,
+  nearestEitherWay,
+  pictureVerdict,
+  type PictureLook,
+  type PictureMatch,
+  type PrintIndex,
+} from '../lib/pictures.ts';
 import { CARD_ASPECT, detectCard, shrink, type Corners, type Image } from './detect.ts';
 import { rotate180, warpCard, type Rgba } from './warp.ts';
 
@@ -74,8 +85,12 @@ export function checkPage(index: PrintIndex, photo: Image, cols: number, rows: n
   return expected.map((card, i) => (card ? checkPocket(index, photo, cw, ch, i % cols, Math.floor(i / cols), card) : null));
 }
 
-function checkPocket(index: PrintIndex, photo: Image, cw: number, ch: number, col: number, row: number, expected: CatalogCard): PocketCheck {
-  // The pocket and a little round it, small
+/**
+ * A pocket's part of the photo (the pocket and a little round it, small) and the outlines its card
+ * could be in: those found inside the pocket, then the pocket itself, card-shaped (for a card
+ * whose edges don't show against the page).
+ */
+function pocketOutlines(photo: Image, cw: number, ch: number, col: number, row: number) {
   const x0 = Math.max(0, Math.floor((col - PAD) * cw));
   const y0 = Math.max(0, Math.floor((row - PAD) * ch));
   const x1 = Math.min(photo.width, Math.ceil((col + 1 + PAD) * cw));
@@ -83,9 +98,6 @@ function checkPocket(index: PrintIndex, photo: Image, cw: number, ch: number, co
   const scale = Math.min(1, SEARCH_HEIGHT / (y1 - y0));
   const small = shrink(crop(photo, x0, y0, x1 - x0, y1 - y0), scale) as Rgba;
   const cell = { x: (col * cw - x0) * scale, y: (row * ch - y0) * scale, w: cw * scale, h: ch * scale };
-
-  // Outlines its card could be in: those found inside the pocket, and the pocket itself (for a
-  // card whose edges don't show against the page), card-shaped.
   const found = detectCard(small, 8);
   const inPocket = (c: Corners) => {
     const m = centreOf(c);
@@ -95,6 +107,68 @@ function checkPocket(index: PrintIndex, photo: Image, cw: number, ch: number, co
   const outlines = (found ? [found.corners, ...found.others] : []).filter(inPocket);
   const fit = Math.min(cell.h * 0.96, (cell.w * 0.96) / CARD_ASPECT);
   outlines.push(box(cell.x + (cell.w - fit * CARD_ASPECT) / 2, cell.y + (cell.h - fit) / 2, fit * CARD_ASPECT, fit));
+  const toPhoto = (c: Corners) => c.map((p) => ({ x: x0 + p.x / scale, y: y0 + p.y / scale })) as Corners;
+  return { small, outlines, toPhoto };
+}
+
+// ---------- a page of any cards: each pocket's card recognised from its picture alone ----------
+
+export interface PocketRead {
+  /** 'clear': the picture names the card; 'guess': it's probably this one; 'none': nothing recognised (an empty pocket, glare) */
+  outcome: 'clear' | 'guess' | 'none';
+  /** The card it is (or most likely is) */
+  card: CatalogCard | null;
+  /** Cards it could also be: reprints with the same picture (which the picture can't tell apart), or the next closest */
+  choices: CatalogCard[];
+  distance: number;
+  corners: Corners;
+}
+
+/** Not clear, but this close and this much closer than any other card: a likely guess. */
+const GUESS_CLOSE = STEADY_CLOSE;
+const GUESS_GAP = Math.round(CLEAR / 2);
+/** Outlines looked at in a pocket, most card-like first (and the pocket itself) */
+const READ_OUTLINES = 5;
+
+/** Recognises the card in each pocket of a photo of a page of `cols`×`rows` pockets, in reading order. */
+export function readPage(index: PrintIndex, photo: Image, cols: number, rows: number): PocketRead[] {
+  const cw = photo.width / cols;
+  const ch = photo.height / rows;
+  return Array.from({ length: cols * rows }, (_, i) => readPocket(index, photo, cw, ch, i % cols, Math.floor(i / cols)));
+}
+
+function readPocket(index: PrintIndex, photo: Image, cw: number, ch: number, col: number, row: number): PocketRead {
+  const { small, outlines, toPhoto } = pocketOutlines(photo, cw, ch, col, row);
+  const some = outlines.length > READ_OUTLINES ? [...outlines.slice(0, READ_OUTLINES - 1), outlines[outlines.length - 1]] : outlines;
+  const looked = some.map((corners) => {
+    const h = Math.max(48, Math.round(heightOf(corners)));
+    const card = warpCard(small, corners, Math.round(h * CARD_ASPECT), h);
+    const turned = rotate180(card);
+    return { corners, card, turned, look: matchCardPicture(index, px(card), px(turned), false) };
+  });
+  const closest = (l: { look: PictureLook }) => l.look.matches[0]?.distance ?? Infinity;
+  let best = looked.reduce((a, b) => (closest(b) < closest(a) ? b : a));
+  if (!best.look.picture?.clear) {
+    // In a sleeve inside the pocket, in the closest few outlines
+    for (const l of [...looked].sort((a, b) => closest(a) - closest(b)).slice(0, SLEEVED_OUTLINES)) {
+      const sleeved = { ...l, look: matchCardPicture(index, px(l.card), px(l.turned), true) };
+      if (closest(sleeved) < closest(best)) best = sleeved;
+    }
+  }
+  const v = best.look.picture;
+  const corners = toPhoto(best.corners);
+  if (v?.clear) return { outcome: 'clear', card: v.best.card, choices: [v.best.card, ...v.twins.map((t) => t.card)], distance: v.best.distance, corners };
+  if (v && v.best.distance <= GUESS_CLOSE && v.gap >= GUESS_GAP) {
+    const near = best.look.matches.filter((m) => m.distance <= v.best.distance + TWIN).map((m) => m.card);
+    return { outcome: 'guess', card: v.best.card, choices: near.slice(0, 6), distance: v.best.distance, corners };
+  }
+  return { outcome: 'none', card: null, choices: best.look.matches.slice(0, 4).map((m) => m.card), distance: v?.best.distance ?? Infinity, corners };
+}
+
+// ---------- a binder's page: each pocket checked against the card that goes there ----------
+
+function checkPocket(index: PrintIndex, photo: Image, cw: number, ch: number, col: number, row: number, expected: CatalogCard): PocketCheck {
+  const { small, outlines, toPhoto } = pocketOutlines(photo, cw, ch, col, row);
 
   // The outline, margins (a card edge to edge in its pocket, or in a sleeve inside it) and way up
   // that look most like the card that goes there: edge to edge first, then (unless that's
@@ -122,7 +196,6 @@ function checkPocket(index: PrintIndex, photo: Image, cw: number, ch: number, co
       for (const margins of SLEEVE_MARGINS) look(t.corners, t.card, t.turned, margins);
     }
   }
-  const toPhoto = (c: Corners) => c.map((p) => ({ x: x0 + p.x / scale, y: y0 + p.y / scale })) as Corners;
   const { matches } = nearestEitherWay(index, best.upright!, best.turned!, 12);
   const verdict = pocketVerdict(expected, best.distance, matches);
   if (verdict.outcome === 'match') return { ...verdict, distance: best.distance, corners: toPhoto(best.corners) };

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { cardPrint, PRINT_WORDS } from '../../../shared/cardprint.ts';
 import type { CatalogCard } from '../lib/catalog.ts';
 import { PrintIndex } from '../lib/pictures.ts';
-import { checkPage, distanceTo, MATCH_CLOSE, MATCH_GAP, pocketVerdict } from './pageScan.ts';
+import { checkPage, distanceTo, MATCH_CLOSE, MATCH_GAP, pocketVerdict, readPage } from './pageScan.ts';
 
 const card = (id: string, name = id): CatalogCard => ({ id, name, nameKey: name, number: '1', image: 'x' }) as unknown as CatalogCard;
 
@@ -45,6 +45,18 @@ test('a page photo: the cards that go in their pockets are found; a wrong card o
   arts.forEach((art, i) => words.set(cardPrint({ ...art, channels: 4 }), i * PRINT_WORDS));
   fillers.forEach((_, i) => words.set(cardPrint({ ...picture(180, 252, 1000 + i), channels: 4 }), (cards.length + i) * PRINT_WORDS));
   const index = new PrintIndex(words, [...cards, ...fillers]);
+
+  // Read from scratch (a page of any cards): each card named, the empty pocket not
+  const reads = readPage(index, { data: page, width: W, height: H }, 2, 2);
+  assert.deepEqual(
+    reads.map((r) => [r.outcome, r.card?.id ?? null]),
+    [
+      ['clear', 'a'],
+      ['clear', 'b'],
+      ['clear', 'x'],
+      ['none', null],
+    ],
+  );
 
   const checks = checkPage(index, { data: page, width: W, height: H }, 2, 2, cards.slice(0, 4));
   assert.deepEqual(
