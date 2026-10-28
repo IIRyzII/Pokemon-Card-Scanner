@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "catalog": "node --experimental-strip-types scripts/build-catalog.mjs",
+    "catalog:download": "node scripts/download-catalog.mjs",
     "dev:web": "npm run dev --workspace web",
     "dev:api": "npm run dev --workspace api",
     "build": "npm run build --workspace web",
