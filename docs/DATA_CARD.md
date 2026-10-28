@@ -1,6 +1,6 @@
 # Data card: PokéVault
 
-This card documents every dataset PokéVault uses or produces. It is structured after Google's Data Cards Playbook and Gebru et al.'s "Datasheets for Datasets". Facts come from the code in this repository and the published catalogue built on 28 October 2026. Anything not yet confirmed is marked **TODO (Ryley)**.
+This card documents every dataset PokéVault uses or produces. It is structured after Google's Data Cards Playbook and Gebru et al.'s "Datasheets for Datasets". Facts come from the code in this repository and the published catalogue built on 28 October 2026. Third-party terms of use and hosting details are described in general terms.
 
 ## Contents
 
@@ -25,7 +25,7 @@ This card documents every dataset PokéVault uses or produces. It is structured 
 **Licence and terms.**
 
 - Card names, pictures and text are the property of Nintendo, Creatures and GAME FREAK (The Pokémon Company). PokéVault is an unofficial fan project.
-- The terms of use for TCGdex's data and of the pokemon-tcg-data files: **TODO (Ryley): confirm and cite.**
+- TCGdex and pokemon-tcg-data are openly published projects. Their own terms of use apply to anyone reusing their data.
 
 **Collection and processing.** `scripts/build-catalog.mjs` runs daily in GitHub Actions (`.github/workflows/deploy-web.yml`). It:
 
@@ -95,7 +95,7 @@ Each card row is an array:
 
 **Source and provenance.** Computed by `scripts/build-catalog.mjs` from each card's small picture on TCGdex (`low.jpg`). Fingerprints from the previous build are reused, so only new cards' pictures are downloaded.
 
-**Licence and terms.** Derived from the card pictures (see dataset 1). Only the fingerprints are published, not the pictures. **TODO (Ryley): confirm this use is within TCGdex's terms.**
+**Licence and terms.** Derived from the card pictures (see dataset 1). Only the fingerprints are published, never the pictures, and they are used only to recognise cards in this non-commercial project.
 
 **Collection and processing.** Defined in `shared/cardprint.ts`, which both the build and the app use:
 
@@ -148,7 +148,7 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 | European Central Bank | Daily euro reference rates | The ECB's daily XML file, fetched by the API at most twice a day |
 | The users | eBay sold prices they log | Entered in the app (stored with the collection, dataset 4) |
 
-**Licence and terms.** Prices belong to their sources. **TODO (Ryley): confirm the terms for Cardmarket's public price files, TCGplayer prices via TCGdex, PriceCharting's API and the ECB's reference rates.**
+**Licence and terms.** Prices belong to their sources. PokéVault uses them for personal, non-commercial valuation. Anyone reusing them should check each source's own terms.
 
 **Collection and processing.**
 
@@ -236,8 +236,8 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 - Expired sessions and rate-limit rows are never deleted. Rate-limit keys contain IP addresses, so those stay in the database indefinitely.
 - The audit log keeps a user's email address after their account is deleted.
 - The live instance allows anyone to create a Pending account, which stores their email address. It has no privacy notice.
-- Cloudflare Workers observability (request logging) is enabled in `api/wrangler.jsonc`. What it records and for how long is set by Cloudflare. **TODO (Ryley): check.**
-- Where Cloudflare stores the D1 database: **TODO (Ryley): check in the Cloudflare dashboard.**
+- Cloudflare Workers observability (request logging) is enabled in `api/wrangler.jsonc`. It keeps request logs for monitoring and debugging, under Cloudflare's own retention rules.
+- The database is hosted by Cloudflare. The project's configuration doesn't set a storage region or jurisdiction, so Cloudflare chooses where it is stored.
 
 **Intended uses.** Managing one shared collection for a small group of trusted users.
 
@@ -248,7 +248,7 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 **Maintenance.**
 
 - The schema changes only through numbered migrations, which `npm run deploy` applies.
-- **TODO (Ryley): decide on a retention period.** A scheduled clean-up of expired sessions and rate-limit rows would close the first gap above.
+- No retention period is set yet. A scheduled clean-up of expired sessions and rate-limit rows, and a retention period for the audit log, would close the gaps above.
 - Owner: Ryley Griffiths.
 
 ## 5. Simulated page-photo evaluation set

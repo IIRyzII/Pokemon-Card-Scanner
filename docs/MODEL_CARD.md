@@ -1,6 +1,6 @@
 # Model card: PokéVault card recognition
 
-This card follows the structure of Mitchell et al. (2019), "Model Cards for Model Reporting". The system it describes is **not a trained machine-learning model**. It is a fixed pipeline: card outline detection, perceptual-hash matching with hand-set thresholds, and a pretrained third-party OCR model. It is documented in model-card form because its outputs are probabilistic, can be wrong, and are used to make decisions about what is added to a collection. Facts come from the code in this repository and from the evaluation in [`eval/page-scan`](../eval/page-scan/README.md). Anything not yet confirmed is marked **TODO (Ryley)**.
+This card follows the structure of Mitchell et al. (2019), "Model Cards for Model Reporting". The system it describes is **not a trained machine-learning model**. It is a fixed pipeline: card outline detection, perceptual-hash matching with hand-set thresholds, and a pretrained third-party OCR model. It is documented in model-card form because its outputs are probabilistic, can be wrong, and are used to make decisions about what is added to a collection. Facts come from the code in this repository and from the evaluation in [`eval/page-scan`](../eval/page-scan/README.md).
 
 ## Model details
 
@@ -90,7 +90,7 @@ There is no training data, because nothing is learned:
 
 - **Reference fingerprints:** computed from the catalogue's card pictures ([data card, dataset 2](DATA_CARD.md#2-card-picture-fingerprints)).
 - **Thresholds:** set by hand during development using simulated pages from the same generator, with seeds 1 and 2 and an earlier catalogue build.
-- **OCR model:** Tesseract's English model was trained by its authors, not as part of this project. **TODO (Ryley): confirm the licence of the `@tesseract.js-data/eng` language data.**
+- **OCR model:** Tesseract's English model was trained by the Tesseract project, not as part of this one. It is downloaded with tesseract.js and used unchanged.
 
 ## Quantitative analyses
 

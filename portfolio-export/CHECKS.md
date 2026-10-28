@@ -48,14 +48,13 @@ Results: **Pass** means no change was needed. **Fixed** means a problem was foun
 
 ## Open items
 
-**Unconfirmed facts, marked "TODO (Ryley)" in the documents:**
+**Described in general terms, not individually verified.** These were placeholders in an earlier draft; the documents now describe them in general terms.
 
 - `docs/DATA_CARD.md`:
-  - terms of use for TCGdex's data and pictures, pokemon-tcg-data, Cardmarket's price files, TCGplayer prices via TCGdex, PriceCharting and the ECB rates
-  - where Cloudflare stores the database, and what its request logging keeps
-  - a retention period for old data
+  - the terms of use of each data and price source (the documents say their own terms apply to anyone reusing the data)
+  - what Cloudflare's request logging keeps, and where it stores the database
+  - data retention (no retention period is set yet)
 - `docs/MODEL_CARD.md`: the licence of the OCR engine's English language data.
-- `portfolio-export/profile-README.md`: a line describing Shiny-Tracker-App, and a link to the report.
 
 **Known gaps, documented in the data card:**
 

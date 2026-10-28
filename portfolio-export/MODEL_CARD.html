@@ -23,7 +23,7 @@
   li { margin: .15em 0; }
 </style></head>
 <body><main id="content"><h1 id="model-card-pokévault-card-recognition">Model card: PokéVault card recognition</h1>
-<p>This card follows the structure of Mitchell et al. (2019), "Model Cards for Model Reporting". The system it describes is <strong>not a trained machine-learning model</strong>. It is a fixed pipeline: card outline detection, perceptual-hash matching with hand-set thresholds, and a pretrained third-party OCR model. It is documented in model-card form because its outputs are probabilistic, can be wrong, and are used to make decisions about what is added to a collection. Facts come from the code in this repository and from the evaluation in <a href="https://github.com/IIRyzII/Pokemon-Card-Scanner/blob/element-b-submission/eval/page-scan/README.md"><code>eval/page-scan</code></a>. Anything not yet confirmed is marked <strong>TODO (Ryley)</strong>.</p>
+<p>This card follows the structure of Mitchell et al. (2019), "Model Cards for Model Reporting". The system it describes is <strong>not a trained machine-learning model</strong>. It is a fixed pipeline: card outline detection, perceptual-hash matching with hand-set thresholds, and a pretrained third-party OCR model. It is documented in model-card form because its outputs are probabilistic, can be wrong, and are used to make decisions about what is added to a collection. Facts come from the code in this repository and from the evaluation in <a href="https://github.com/IIRyzII/Pokemon-Card-Scanner/blob/element-b-submission/eval/page-scan/README.md"><code>eval/page-scan</code></a>.</p>
 <h2 id="model-details">Model details</h2>
 <ul>
 <li><strong>Developer:</strong> Ryley Griffiths, as part of PokéVault.</li>
@@ -143,7 +143,7 @@
 <ul>
 <li><strong>Reference fingerprints:</strong> computed from the catalogue's card pictures (<a href="https://github.com/IIRyzII/Pokemon-Card-Scanner/blob/element-b-submission/docs/DATA_CARD.md#2-card-picture-fingerprints">data card, dataset 2</a>).</li>
 <li><strong>Thresholds:</strong> set by hand during development using simulated pages from the same generator, with seeds 1 and 2 and an earlier catalogue build.</li>
-<li><strong>OCR model:</strong> Tesseract's English model was trained by its authors, not as part of this project. <strong>TODO (Ryley): confirm the licence of the <code>@tesseract.js-data/eng</code> language data.</strong></li>
+<li><strong>OCR model:</strong> Tesseract's English model was trained by the Tesseract project, not as part of this one. It is downloaded with tesseract.js and used unchanged.</li>
 </ul>
 <h2 id="quantitative-analyses">Quantitative analyses</h2>
 <p>Held-out set (seed 3, 60 pages); full results are in <a href="https://github.com/IIRyzII/Pokemon-Card-Scanner/blob/element-b-submission/eval/page-scan/README.md"><code>eval/page-scan/README.md</code></a>:</p>

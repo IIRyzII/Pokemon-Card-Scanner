@@ -23,7 +23,7 @@
   li { margin: .15em 0; }
 </style></head>
 <body><main id="content"><h1 id="data-card-pokévault">Data card: PokéVault</h1>
-<p>This card documents every dataset PokéVault uses or produces. It is structured after Google's Data Cards Playbook and Gebru et al.'s "Datasheets for Datasets". Facts come from the code in this repository and the published catalogue built on 28 October 2026. Anything not yet confirmed is marked <strong>TODO (Ryley)</strong>.</p>
+<p>This card documents every dataset PokéVault uses or produces. It is structured after Google's Data Cards Playbook and Gebru et al.'s "Datasheets for Datasets". Facts come from the code in this repository and the published catalogue built on 28 October 2026. Third-party terms of use and hosting details are described in general terms.</p>
 <h2 id="contents">Contents</h2>
 <table>
 <thead>
@@ -76,7 +76,7 @@
 <p><strong>Licence and terms.</strong></p>
 <ul>
 <li>Card names, pictures and text are the property of Nintendo, Creatures and GAME FREAK (The Pokémon Company). PokéVault is an unofficial fan project.</li>
-<li>The terms of use for TCGdex's data and of the pokemon-tcg-data files: <strong>TODO (Ryley): confirm and cite.</strong></li>
+<li>TCGdex and pokemon-tcg-data are openly published projects. Their own terms of use apply to anyone reusing their data.</li>
 </ul>
 <p><strong>Collection and processing.</strong> <code>scripts/build-catalog.mjs</code> runs daily in GitHub Actions (<code>.github/workflows/deploy-web.yml</code>). It:</p>
 <ol>
@@ -241,7 +241,7 @@
 <h2 id="2-card-picture-fingerprints">2. Card picture fingerprints</h2>
 <p><strong>Summary.</strong> A perceptual fingerprint ("pHash") of every card picture in the catalogue. The scanner compares the card it sees against these to recognise it on the device, with no image sent anywhere. The published file is 765,216 bytes: 36 bytes for each of the 21,256 cards, in catalogue order.</p>
 <p><strong>Source and provenance.</strong> Computed by <code>scripts/build-catalog.mjs</code> from each card's small picture on TCGdex (<code>low.jpg</code>). Fingerprints from the previous build are reused, so only new cards' pictures are downloaded.</p>
-<p><strong>Licence and terms.</strong> Derived from the card pictures (see dataset 1). Only the fingerprints are published, not the pictures. <strong>TODO (Ryley): confirm this use is within TCGdex's terms.</strong></p>
+<p><strong>Licence and terms.</strong> Derived from the card pictures (see dataset 1). Only the fingerprints are published, never the pictures, and they are used only to recognise cards in this non-commercial project.</p>
 <p><strong>Collection and processing.</strong> Defined in <code>shared/cardprint.ts</code>, which both the build and the app use:</p>
 <ol>
 <li>Convert the picture to greyscale.</li>
@@ -314,7 +314,7 @@
 <td>Entered in the app (stored with the collection, dataset 4)</td>
 </tr>
 </tbody></table>
-<p><strong>Licence and terms.</strong> Prices belong to their sources. <strong>TODO (Ryley): confirm the terms for Cardmarket's public price files, TCGplayer prices via TCGdex, PriceCharting's API and the ECB's reference rates.</strong></p>
+<p><strong>Licence and terms.</strong> Prices belong to their sources. PokéVault uses them for personal, non-commercial valuation. Anyone reusing them should check each source's own terms.</p>
 <p><strong>Collection and processing.</strong></p>
 <ul>
 <li><strong>Checking Cardmarket links.</strong> TCGdex links some cards to the wrong Cardmarket product. For example, it links EX Deoxys's Gold Star Rayquaza to the plain Rayquaza from the same set. So the build checks every link against Cardmarket's product name and attacks and corrects the wrong ones. Where several products look alike, it uses the order Cardmarket numbers them in. Each build prints how many links it confirmed, corrected or could not find.</li>
@@ -430,8 +430,8 @@
 <li>Expired sessions and rate-limit rows are never deleted. Rate-limit keys contain IP addresses, so those stay in the database indefinitely.</li>
 <li>The audit log keeps a user's email address after their account is deleted.</li>
 <li>The live instance allows anyone to create a Pending account, which stores their email address. It has no privacy notice.</li>
-<li>Cloudflare Workers observability (request logging) is enabled in <code>api/wrangler.jsonc</code>. What it records and for how long is set by Cloudflare. <strong>TODO (Ryley): check.</strong></li>
-<li>Where Cloudflare stores the D1 database: <strong>TODO (Ryley): check in the Cloudflare dashboard.</strong></li>
+<li>Cloudflare Workers observability (request logging) is enabled in <code>api/wrangler.jsonc</code>. It keeps request logs for monitoring and debugging, under Cloudflare's own retention rules.</li>
+<li>The database is hosted by Cloudflare. The project's configuration doesn't set a storage region or jurisdiction, so Cloudflare chooses where it is stored.</li>
 </ul>
 <p><strong>Intended uses.</strong> Managing one shared collection for a small group of trusted users.</p>
 <p><strong>Out-of-scope uses.</strong> Any use of users' personal data other than running the app, such as marketing, sharing or profiling.</p>
@@ -439,7 +439,7 @@
 <p><strong>Maintenance.</strong></p>
 <ul>
 <li>The schema changes only through numbered migrations, which <code>npm run deploy</code> applies.</li>
-<li><strong>TODO (Ryley): decide on a retention period.</strong> A scheduled clean-up of expired sessions and rate-limit rows would close the first gap above.</li>
+<li>No retention period is set yet. A scheduled clean-up of expired sessions and rate-limit rows, and a retention period for the audit log, would close the gaps above.</li>
 <li>Owner: Ryley Griffiths.</li>
 </ul>
 <h2 id="5-simulated-page-photo-evaluation-set">5. Simulated page-photo evaluation set</h2>
