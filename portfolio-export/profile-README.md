@@ -26,7 +26,7 @@ These are skills used in the projects below and in my roles:
   - role-based access control and rate limiting
 - **Data and evaluation:** data pipelines, documenting datasets and models with data cards and model cards, and evaluating with held-out test data.
 - **Computer vision:** image processing and perceptual hashing for recognising cards on a phone.
-- **Ways of working:** automated testing (unit and end-to-end), version control with Git, and AI-assisted development with Claude Code.
+- **Ways of working:** automated testing (unit and end-to-end), version control with Git
 
 ## Featured projects
 

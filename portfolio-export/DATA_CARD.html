@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PokéVault: data card</title><style>
+  :root { color: #1a1a1a; background: #fff; }
+  body { font: 11pt/1.5 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; margin: 0; }
+  main { max-width: 46em; margin: 0 auto; padding: 1.5em 1em; }
+  h1 { font-size: 1.9em; margin: 0 0 .4em; }
+  h2 { font-size: 1.4em; margin: 1.4em 0 .5em; padding-bottom: .2em; border-bottom: 1px solid #ccc; }
+  h3 { font-size: 1.15em; margin: 1.2em 0 .4em; }
+  h1, h2, h3 { break-after: avoid; line-height: 1.25; }
+  a { color: #0b57d0; }
+  code { font-family: Consolas, "Cascadia Mono", monospace; font-size: .92em; background: #f2f2f2; padding: .05em .3em; border-radius: 3px; }
+  pre { background: #f2f2f2; padding: .7em .9em; border-radius: 4px; white-space: pre-wrap; word-break: break-word; break-inside: avoid; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8em 0; font-size: .95em; break-inside: auto; }
+  th, td { border: 1px solid #bbb; padding: .35em .5em; text-align: left; vertical-align: top; }
+  th { background: #eef1f5; }
+  tr { break-inside: avoid; }
+  img { max-width: 100%; height: auto; }
+  p > img { max-width: 31%; margin: 0 1% .5em 0; vertical-align: top; border: 1px solid #ddd; break-inside: avoid; }
+  .mermaid { margin: 1em 0; break-inside: avoid; text-align: center; }
+  .mermaid svg { max-width: 100%; height: auto; }
+  li { margin: .15em 0; }
+</style></head>
+<body><main id="content"><h1 id="data-card-pokévault">Data card: PokéVault</h1>
+<p>This card documents every dataset PokéVault uses or produces. It is structured after Google's Data Cards Playbook and Gebru et al.'s "Datasheets for Datasets". Facts come from the code in this repository and the published catalogue built on 28 October 2026. Anything not yet confirmed is marked <strong>TODO (Ryley)</strong>.</p>
+<h2 id="contents">Contents</h2>
+<table>
+<thead>
+<tr>
+<th>Dataset</th>
+<th>What it is</th>
+<th>Where it lives</th>
+<th>Personal data</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="#1-card-catalogue">1. Card catalogue</a></td>
+<td>Every English Pokémon card and set</td>
+<td>Built daily; published with the web app (<code>catalog/catalog.json</code>)</td>
+<td>Illustrators' credited names only</td>
+</tr>
+<tr>
+<td><a href="#2-card-picture-fingerprints">2. Card picture fingerprints</a></td>
+<td>A 286-bit fingerprint of each card's picture</td>
+<td>Published with the web app (<code>catalog/prints.bin</code>)</td>
+<td>None</td>
+</tr>
+<tr>
+<td><a href="#3-market-prices">3. Market prices</a></td>
+<td>Card prices from TCGplayer, Cardmarket and optionally PriceCharting, plus exchange rates</td>
+<td>Published files and API database tables</td>
+<td>None</td>
+</tr>
+<tr>
+<td><a href="#4-accounts-and-collection-database">4. Accounts and collection database</a></td>
+<td>Users, sessions, the shared collection, binders, want list, audit log</td>
+<td>Cloudflare D1 (the API's database)</td>
+<td>Yes: see section 4</td>
+</tr>
+<tr>
+<td><a href="#5-simulated-page-photo-evaluation-set">5. Simulated page-photo evaluation set</a></td>
+<td>Generated photos of binder pages with known contents</td>
+<td>Generated locally, not committed</td>
+<td>None</td>
+</tr>
+</tbody></table>
+<h2 id="1-card-catalogue">1. Card catalogue</h2>
+<p><strong>Summary.</strong> A compact index of every English Pokémon Trading Card Game card that the app can search, scan and value. The 28 October 2026 build holds 21,256 cards in 205 sets, 399 illustrators, 31 rarities and 3 categories (Pokémon, Trainer, Energy), in about 1.2 MB of JSON.</p>
+<p><strong>Source and provenance.</strong></p>
+<ul>
+<li>Sets, cards, rarities, illustrators, HP and printings come from the <a href="https://tcgdex.dev">TCGdex</a> API (<code>https://api.tcgdex.net/v2/en</code>, REST and GraphQL).</li>
+<li>For about 50 sets where TCGdex marks every card "normal" (mostly Black &amp; White, XY and Sun &amp; Moon), printings are inferred from each card's rarity in the <a href="https://github.com/PokemonTCG/pokemon-tcg-data">pokemon-tcg-data</a> files.</li>
+<li>Card pictures are not copied. The catalogue stores a link base (<code>https://assets.tcgdex.net/en</code>). Where TCGdex has no picture, the app falls back to <code>images.pokemontcg.io</code> at display time.</li>
+</ul>
+<p><strong>Licence and terms.</strong></p>
+<ul>
+<li>Card names, pictures and text are the property of Nintendo, Creatures and GAME FREAK (The Pokémon Company). PokéVault is an unofficial fan project.</li>
+<li>The terms of use for TCGdex's data and of the pokemon-tcg-data files: <strong>TODO (Ryley): confirm and cite.</strong></li>
+</ul>
+<p><strong>Collection and processing.</strong> <code>scripts/build-catalog.mjs</code> runs daily in GitHub Actions (<code>.github/workflows/deploy-web.yml</code>). It:</p>
+<ol>
+<li>Fetches all sets and cards, skipping the digital-only Pokémon TCG Pocket series.</li>
+<li>Normalises illustrator names, so spelling variants of the same artist are grouped together.</li>
+<li>Works out each card's printings. These are the plain printings (regular, holo, reverse holo, 1st Edition, W promo) plus special printings (special foils, stamps and metal cards). The build classifies each printing as from the set's packs or as a promo, and links stamped promo cards to the set card they reprint (by name and attacks).</li>
+<li>Corrects known errors in the source data. For example, every Fossil card is listed with a "galaxy" foil, and some gold secret rares are listed twice.</li>
+</ol>
+<p><strong>Schema.</strong> <code>catalog.json</code> is an object with these fields:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>version</code></td>
+<td>number</td>
+<td>Format version (1)</td>
+</tr>
+<tr>
+<td><code>builtAt</code></td>
+<td>ISO 8601 date-time</td>
+<td>When the build ran</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>string</td>
+<td>Attribution text</td>
+</tr>
+<tr>
+<td><code>imageBase</code></td>
+<td>URL</td>
+<td>Base address for card pictures</td>
+</tr>
+<tr>
+<td><code>columns</code></td>
+<td>string[]</td>
+<td>Names of the first ten fields of each card row</td>
+</tr>
+<tr>
+<td><code>sets</code></td>
+<td>object[]</td>
+<td><code>id</code>, <code>name</code>, <code>serie</code>, <code>serieName</code>, <code>date</code>, <code>official</code> (printed set size), <code>total</code>, <code>code</code>, <code>logo</code>, <code>symbol</code></td>
+</tr>
+<tr>
+<td><code>artists</code>, <code>rarities</code>, <code>categories</code></td>
+<td>string[]</td>
+<td>Lookup tables that card rows point into</td>
+</tr>
+<tr>
+<td><code>imageOverrides</code></td>
+<td>object</td>
+<td>Card id → picture URL, where TCGdex's address doesn't fit the pattern</td>
+</tr>
+<tr>
+<td><code>cards</code></td>
+<td>array[]</td>
+<td>One row per card (below)</td>
+</tr>
+<tr>
+<td><code>printings</code></td>
+<td>number</td>
+<td>1 when rows carry promo printings (fields 11–13)</td>
+</tr>
+</tbody></table>
+<p>Each card row is an array:</p>
+<table>
+<thead>
+<tr>
+<th>Position</th>
+<th>Field</th>
+<th>Example (Kingdra, Paradox Rift)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Card id</td>
+<td><code>"sv04-032"</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Name</td>
+<td><code>"Kingdra"</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Number as printed</td>
+<td><code>"032"</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Set (index into <code>sets</code>)</td>
+<td><code>182</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Illustrator (index into <code>artists</code>, −1 if none)</td>
+<td><code>354</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td>Rarity (index into <code>rarities</code>)</td>
+<td><code>19</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td>Category (index into <code>categories</code>)</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td>8</td>
+<td>Has a picture (1 or 0)</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td>9</td>
+<td>HP (0 if none)</td>
+<td><code>150</code></td>
+</tr>
+<tr>
+<td>10</td>
+<td>Plain printings, as bits (regular, holo, reverse, 1st Edition, W promo)</td>
+<td><code>6</code> (holo and reverse)</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Special printings (or 0)</td>
+<td><code>["holo~cosmos"]</code></td>
+</tr>
+<tr>
+<td>12</td>
+<td>Printings found only in promos (or 0)</td>
+<td><code>["holo~cosmos"]</code></td>
+</tr>
+<tr>
+<td>13</td>
+<td>For a stamped promo card, the set card it reprints (or 0)</td>
+<td><code>0</code></td>
+</tr>
+</tbody></table>
+<p><code>meta.json</code> records the build time, card, set and artist counts, and a hash of each published file. The app uses it to know when to download a new catalogue.</p>
+<p><strong>Personal or sensitive data.</strong> None, apart from illustrators' names as credited on the cards. They are public professional attributions and are used only to group and browse cards by artist.</p>
+<p><strong>Intended uses.</strong> Searching for cards, identifying scanned cards, building binders and set checklists, and showing which printings a card comes in.</p>
+<p><strong>Out-of-scope uses.</strong> It is not an authoritative record of print runs or rarity, and not a source of card pictures or text for redistribution. It is not suitable for Japanese, Korean or Chinese cards, which it doesn't include.</p>
+<p><strong>Known limitations and biases.</strong></p>
+<ul>
+<li>English cards only.</li>
+<li>Accuracy depends on TCGdex. Errors found so far are corrected in the build, but others will exist.</li>
+<li>Printings for about 50 older sets are inferred from rarity, not recorded.</li>
+<li>A card without a picture can be found by search or by its printed text, but not by its picture.</li>
+<li>New sets appear only once TCGdex adds them.</li>
+</ul>
+<p><strong>Maintenance.</strong></p>
+<ul>
+<li>Rebuilt every day and on every push to <code>main</code>. If a build fails, the previously published catalogue is reused.</li>
+<li>The format version and per-file hashes let the app and the build detect changes.</li>
+<li>Owner: Ryley Griffiths.</li>
+</ul>
+<h2 id="2-card-picture-fingerprints">2. Card picture fingerprints</h2>
+<p><strong>Summary.</strong> A perceptual fingerprint ("pHash") of every card picture in the catalogue. The scanner compares the card it sees against these to recognise it on the device, with no image sent anywhere. The published file is 765,216 bytes: 36 bytes for each of the 21,256 cards, in catalogue order.</p>
+<p><strong>Source and provenance.</strong> Computed by <code>scripts/build-catalog.mjs</code> from each card's small picture on TCGdex (<code>low.jpg</code>). Fingerprints from the previous build are reused, so only new cards' pictures are downloaded.</p>
+<p><strong>Licence and terms.</strong> Derived from the card pictures (see dataset 1). Only the fingerprints are published, not the pictures. <strong>TODO (Ryley): confirm this use is within TCGdex's terms.</strong></p>
+<p><strong>Collection and processing.</strong> Defined in <code>shared/cardprint.ts</code>, which both the build and the app use:</p>
+<ol>
+<li>Convert the picture to greyscale.</li>
+<li>Take two regions: the whole card, and the artwork area (10–90% across, 11–50% down).</li>
+<li>Resample each to 48 × 48 pixels and take the 12 × 12 lowest frequencies of its discrete cosine transform, dropping the constant term.</li>
+<li>Set each bit to whether that coefficient is above the region's median.</li>
+</ol>
+<p>This gives 2 × 143 = 286 bits, stored as nine 32-bit words, with all zeros meaning "no picture". Pictures are compared by Hamming distance (the number of differing bits).</p>
+<p><strong>Schema.</strong> A flat binary file of little-endian unsigned 32-bit words, <code>9 × number of cards</code> long. Card <em>i</em>'s fingerprint is words <code>9i</code> to <code>9i + 8</code>. <code>meta.json</code> records the fingerprint format version, so a format change forces every fingerprint to be recomputed.</p>
+<p><strong>Personal or sensitive data.</strong> None.</p>
+<p><strong>Intended uses.</strong> Recognising a card from a photo, in the browser.</p>
+<p><strong>Out-of-scope uses.</strong> Recovering card pictures (a fingerprint is far too coarse) and identifying anything other than cards in the catalogue.</p>
+<p><strong>Known limitations and biases.</strong></p>
+<ul>
+<li>A fingerprint captures broad light and dark shapes, so reprints with the same artwork have near-identical fingerprints; the app then reads the printed number.</li>
+<li>Cards that are mostly flat colour (some Energy cards, for example) are harder to tell apart.</li>
+<li>Glare and holographic foil change a photo's fingerprint.</li>
+</ul>
+<p>See the <a href="https://github.com/IIRyzII/Pokemon-Card-Scanner/blob/element-b-submission/docs/MODEL_CARD.md">model card</a> for how recognition uses it.</p>
+<p><strong>Maintenance.</strong> Rebuilt with the catalogue. Owner: Ryley Griffiths.</p>
+<h2 id="3-market-prices">3. Market prices</h2>
+<p><strong>Summary.</strong> The prices the app values cards with. It has three parts:</p>
+<ul>
+<li><strong>Published with the catalogue:</strong><ul>
+<li><code>prices.json</code>: one near-mint price for each card's standard printing, for set values.</li>
+<li><code>cardmarket/&lt;set&gt;.json</code>: Cardmarket prices per card and per special printing.</li>
+</ul>
+</li>
+<li><strong>Kept by the API in its database:</strong><ul>
+<li><code>card_prices</code>: the latest price points.</li>
+<li><code>price_history</code>: one point per card, source, printing and grade a day.</li>
+<li><code>fx_rates</code>: the European Central Bank's latest rates.</li>
+<li><code>pricecharting_map</code>: which PriceCharting product a card matches.</li>
+<li><code>card_cache</code>: card details cached from TCGdex.</li>
+</ul>
+</li>
+</ul>
+<p><strong>Source and provenance.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>What</th>
+<th>How it is fetched</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>TCGplayer, via TCGdex</td>
+<td>US market prices (USD) for English cards</td>
+<td>From TCGdex's card data</td>
+</tr>
+<tr>
+<td>Cardmarket</td>
+<td>European prices (EUR) for cards in any language</td>
+<td>Cardmarket's public product list and daily price guide (<code>downloads.s3.cardmarket.com/productCatalog</code>)</td>
+</tr>
+<tr>
+<td>PriceCharting (optional)</td>
+<td>Graded prices (PSA, BGS, CGC, SGC)</td>
+<td>PriceCharting's API, with a paid token kept as a server secret</td>
+</tr>
+<tr>
+<td>European Central Bank</td>
+<td>Daily euro reference rates</td>
+<td>The ECB's daily XML file, fetched by the API at most twice a day</td>
+</tr>
+<tr>
+<td>The users</td>
+<td>eBay sold prices they log</td>
+<td>Entered in the app (stored with the collection, dataset 4)</td>
+</tr>
+</tbody></table>
+<p><strong>Licence and terms.</strong> Prices belong to their sources. <strong>TODO (Ryley): confirm the terms for Cardmarket's public price files, TCGplayer prices via TCGdex, PriceCharting's API and the ECB's reference rates.</strong></p>
+<p><strong>Collection and processing.</strong></p>
+<ul>
+<li><strong>Checking Cardmarket links.</strong> TCGdex links some cards to the wrong Cardmarket product. For example, it links EX Deoxys's Gold Star Rayquaza to the plain Rayquaza from the same set. So the build checks every link against Cardmarket's product name and attacks and corrects the wrong ones. Where several products look alike, it uses the order Cardmarket numbers them in. Each build prints how many links it confirmed, corrected or could not find.</li>
+<li><strong>Special printings.</strong> A special printing (a cosmos holo, a stamped card) is priced from its own Cardmarket product. Until it has one, the app uses the plain printing's price and says so.</li>
+<li><strong>Set values.</strong> <code>prices.json</code> gives each card's standard printing in USD (TCGplayer) or else EUR (Cardmarket), in catalogue order.</li>
+<li><strong>Conversion.</strong> The API converts prices into the collection's currency with the ECB's rates.</li>
+</ul>
+<p><strong>Schema.</strong></p>
+<ul>
+<li><strong><code>prices.json</code>:</strong> <code>{ version, updated, usd: (number | null)[], eur: (number | null)[] }</code>, one entry per catalogue card. In the 28 October 2026 build, 17,441 cards have a USD price and 3,221 a EUR price.</li>
+<li><strong><code>cardmarket/&lt;set&gt;.json</code>:</strong> <code>{ version, updated, cards }</code>. In <code>cards</code>, a card id (or <code>cardId|printing</code> for a special printing) maps to either 0 (no product) or <code>[product id, trend, low, 30-day average, holo trend, holo low, holo 30-day average]</code> in EUR. Cardmarket's "holo" prices are the reverse holo's.</li>
+<li><strong>API tables:</strong> defined in <code>api/migrations/0001_init.sql</code> and <code>0002_currency.sql</code>. Prices are stored with their currency and the time they were fetched.</li>
+</ul>
+<p><strong>Personal or sensitive data.</strong> None.</p>
+<p><strong>Intended uses.</strong> Approximate valuation of a personal collection, set completion costs and a want-list budget.</p>
+<p><strong>Out-of-scope uses.</strong></p>
+<ul>
+<li>Pricing for sales or insurance.</li>
+<li>Financial or investment decisions.</li>
+<li>A record of what any card sold for: the prices are aggregates from the sources, not transactions.</li>
+</ul>
+<p><strong>Known limitations and biases.</strong></p>
+<ul>
+<li>Markets differ. TCGplayer reflects the US market for English cards; Cardmarket reflects European sales of a card in any language.</li>
+<li>Prices for rarely traded cards are noisy, and averages lag sudden moves.</li>
+<li>Set values assume one near-mint copy of each card's standard printing.</li>
+<li>Catalogue prices are refreshed when the site rebuilds (TCGplayer's every 6 days, Cardmarket's daily). Prices for cards in the collection are refreshed by the API (see Maintenance).</li>
+<li>The link check reduces, but cannot remove, the chance of a card being matched to the wrong product. A card it can't settle is left without a Cardmarket price rather than given a wrong one.</li>
+<li>Graded prices need a paid PriceCharting subscription; without one, graded copies are valued only from sales the users log.</li>
+</ul>
+<p><strong>Maintenance.</strong></p>
+<ul>
+<li>Catalogue prices are rebuilt daily with the catalogue.</li>
+<li>For cards in the collection, the API's hourly job refreshes any price more than 20 hours old, and opening the app refreshes those more than 6 hours old.</li>
+<li>Owner: Ryley Griffiths.</li>
+</ul>
+<h2 id="4-accounts-and-collection-database">4. Accounts and collection database</h2>
+<p><strong>Summary.</strong> Everything users create: their accounts, the shared collection, binders, the want list, logged sales and an audit log. It is stored in a Cloudflare D1 (SQLite) database behind the API. The schema is defined by the migrations in <code>api/migrations/</code>.</p>
+<p><strong>Source and provenance.</strong> Entered by the app's users. The live instance is run by Ryley Griffiths for a personal collection.</p>
+<p><strong>Licence and terms.</strong> Not published. The repository contains no user data, only the schema. The test files use made-up <code>example.com</code> accounts.</p>
+<p><strong>Collection and processing.</strong></p>
+<ul>
+<li><strong>Accounts:</strong><ul>
+<li>An account is created with an email address, a display name and a password.</li>
+<li>The browser stretches the password with PBKDF2-SHA256 (600,000 iterations) before sending it. The server stores only a salted SHA-256 hash of the result, so the password itself never reaches the server.</li>
+<li>The first account becomes the admin; later sign-ups are "Pending" until an admin approves them.</li>
+</ul>
+</li>
+<li><strong>Collection:</strong><ul>
+<li>Collection items, binders, wants and logged sales record who created them.</li>
+<li>Every change is written to the audit log.</li>
+</ul>
+</li>
+<li><strong>Scans:</strong> camera frames and photos are processed in the browser and are not stored or sent to the API.</li>
+</ul>
+<p><strong>Schema (fields that relate to people).</strong> Collection data (cards, printings, conditions, prices) is in the same database.</p>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Personal fields</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>users</code></td>
+<td>email, display name, password salt and hash, role, failed sign-ins, lock time, created and last sign-in times</td>
+<td>Signing in, roles</td>
+</tr>
+<tr>
+<td><code>sessions</code></td>
+<td>hash of the session token, user id, created and expiry times, browser user-agent</td>
+<td>Staying signed in (30 days)</td>
+</tr>
+<tr>
+<td><code>rate_limits</code></td>
+<td>a key containing the visitor's IP address (sign-in and sign-up) or user id (password change), a count and a reset time</td>
+<td>Brute-force protection</td>
+</tr>
+<tr>
+<td><code>audit_log</code></td>
+<td>user id and email, action, item, details, time</td>
+<td>Who changed what</td>
+</tr>
+<tr>
+<td><code>collection_items</code></td>
+<td>the id of the user who added or removed it; purchase price and date, notes, grading cert number</td>
+<td>The collection</td>
+</tr>
+<tr>
+<td><code>sales</code>, <code>binders</code>, <code>wants</code></td>
+<td>the id of the user who created it</td>
+<td>Sales log, binders, want list</td>
+</tr>
+</tbody></table>
+<p><strong>Personal or sensitive data and how it is protected.</strong></p>
+<ul>
+<li><strong>Passwords:</strong> never sent or stored in plain text (above).</li>
+<li><strong>Session tokens:</strong> random, and stored only as hashes.</li>
+<li><strong>Brute-force limits:</strong><ul>
+<li>Sign-in is rate-limited to 30 attempts per IP address per 15 minutes.</li>
+<li>Sign-up is rate-limited to 5 per IP address per hour.</li>
+<li>An account locks for 15 minutes after 8 wrong passwords.</li>
+</ul>
+</li>
+<li><strong>Roles:</strong> every API request is checked against the user's role (Pending, Viewer, Editor, Admin), so hiding a button in the app is never the only protection.</li>
+<li><strong>Who can call the API:</strong> only the configured web addresses (<code>ALLOWED_ORIGINS</code>), over HTTPS.</li>
+<li><strong>Deletion:</strong> removing a card moves it to a trash that only an admin can empty. Deleting a user removes their sessions, and their items stay with no owner recorded.</li>
+<li><strong>Backups:</strong> admins can download all data as JSON, or the collection as CSV. D1 Time Travel can restore the database to any point in the last 7 days.</li>
+</ul>
+<p><strong>Known gaps</strong> (from reading the code; not yet fixed):</p>
+<ul>
+<li>Expired sessions and rate-limit rows are never deleted. Rate-limit keys contain IP addresses, so those stay in the database indefinitely.</li>
+<li>The audit log keeps a user's email address after their account is deleted.</li>
+<li>The live instance allows anyone to create a Pending account, which stores their email address. It has no privacy notice.</li>
+<li>Cloudflare Workers observability (request logging) is enabled in <code>api/wrangler.jsonc</code>. What it records and for how long is set by Cloudflare. <strong>TODO (Ryley): check.</strong></li>
+<li>Where Cloudflare stores the D1 database: <strong>TODO (Ryley): check in the Cloudflare dashboard.</strong></li>
+</ul>
+<p><strong>Intended uses.</strong> Managing one shared collection for a small group of trusted users.</p>
+<p><strong>Out-of-scope uses.</strong> Any use of users' personal data other than running the app, such as marketing, sharing or profiling.</p>
+<p><strong>Known limitations.</strong> One shared collection per deployment, with no per-user collections. No retention policy is enforced (see the gaps above).</p>
+<p><strong>Maintenance.</strong></p>
+<ul>
+<li>The schema changes only through numbered migrations, which <code>npm run deploy</code> applies.</li>
+<li><strong>TODO (Ryley): decide on a retention period.</strong> A scheduled clean-up of expired sessions and rate-limit rows would close the first gap above.</li>
+<li>Owner: Ryley Griffiths.</li>
+</ul>
+<h2 id="5-simulated-page-photo-evaluation-set">5. Simulated page-photo evaluation set</h2>
+<p><strong>Summary.</strong> Synthetic photos of binder pages, with a record of which card is in each pocket. They are used to measure the page scanner. They are generated on demand, not committed: the evaluation in this repository used 140 pages (seeds 1, 2 and 3).</p>
+<p><strong>Source and provenance.</strong> <code>eval/page-scan/generate.py</code> composes each page from the catalogue's card pictures, which it downloads from TCGdex into a local cache. It then adds pocket plastic haze, seams, sleeves, lamp glare, misalignment, tilt, noise, blur and JPEG compression.</p>
+<p><strong>Licence and terms.</strong> Derived from the card pictures (see dataset 1), so the generated images are not redistributed.</p>
+<p><strong>Collection and processing.</strong></p>
+<ul>
+<li><strong>Pages:</strong> each page holds consecutive cards from one set.</li>
+<li><strong>Pockets:</strong> about 10% are left empty and about 10% hold a random card from another set; about 30% of cards are in penny sleeves.</li>
+<li><strong>Repeatable:</strong> the output is the same for a given seed and catalogue build.</li>
+</ul>
+<p><strong>Schema.</strong> <code>truth.json</code> holds:</p>
+<ul>
+<li>the seed</li>
+<li>the catalogue build used (time and hash)</li>
+<li>one entry per page: its file name, the pocket layout (columns and rows), the card that belongs in each pocket, the card actually in it (or null if empty), and whether each card is sleeved</li>
+</ul>
+<p><strong>Personal or sensitive data.</strong> None.</p>
+<p><strong>Intended uses.</strong> Measuring and comparing versions of the page scanner.</p>
+<p><strong>Out-of-scope uses.</strong> Claims about accuracy on real photographs, and training models: the photos come from the same pictures as the fingerprints.</p>
+<p><strong>Known limitations and biases.</strong></p>
+<ul>
+<li>Simulated, not photographed. Real cards differ from their scans (colour, print variation, wear, holographic foil), and real binder plastic and phone cameras behave differently. Results are therefore expected to be optimistic.</li>
+<li>Wrong cards come from other sets, which is easier than a reprint of the right card.</li>
+<li>Results depend on the catalogue build (recorded in <code>truth.json</code>).</li>
+</ul>
+<p><strong>Maintenance.</strong> The generator and scorer live in <code>eval/page-scan/</code>. Re-run them after changing the scanner. Owner: Ryley Griffiths.</p>
+</main>
+
+</body></html>

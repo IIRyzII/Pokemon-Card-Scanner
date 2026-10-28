@@ -5,7 +5,7 @@ This folder measures how well the page scanner (`web/src/scan/pageScan.ts`) hand
 - **Check** (a binder's page in the app): each pocket is compared with the card that belongs there.
 - **Read** (the scanner's "Binder page" mode): each pocket's card is recognised from its picture alone.
 
-The photos are simulated, not real. `generate.py` composes binder pages from the catalog's card pictures and adds the problems a phone photo has. `score.mjs` runs the scanner on them and compares its answers with what the generator put in each pocket.
+The photos are simulated, not real. `generate.py` composes binder pages from the catalogue's card pictures and adds the problems a phone photo has. `score.mjs` runs the scanner on them and compares its answers with what the generator put in each pocket.
 
 ## What the simulated photos include
 
@@ -21,17 +21,17 @@ The photos are simulated, not real. `generate.py` composes binder pages from the
 You need Node.js 22.12 or newer (with `npm ci` run in the repository root), Python 3 with the packages in `requirements.txt`, and an internet connection. The first run downloads about 1,300 card pictures (about 60 MB) into `.cache/`.
 
 ```bash
-npm run catalog:download                          # the published catalog and picture fingerprints
+npm run catalog:download                          # the published catalogue and picture fingerprints
 pip install -r eval/page-scan/requirements.txt
 python eval/page-scan/generate.py 60 3 eval/page-scan/out/held-out
 node --experimental-strip-types eval/page-scan/score.mjs eval/page-scan/out/held-out
 ```
 
-`generate.py PAGES SEED OUT_DIR` is repeatable for a given seed and catalog. Add `--detail` to `score.mjs` to list every pocket that wasn't handled perfectly.
+`generate.py PAGES SEED OUT_DIR` is repeatable for a given seed and catalogue. Add `--detail` to `score.mjs` to list every pocket that wasn't handled perfectly.
 
 ## Results
 
-These results come from the catalog built on 28 October 2026 (hash `a70246deedf3`). A different catalog build picks different sets, so expect small differences.
+These results come from the catalogue built on 28 October 2026 (hash `a70246deedf3`). A different catalogue build picks different sets, so expect small differences.
 
 The detection thresholds in `pageScan.ts` were chosen during development using pages from this generator with seeds 1 and 2. The **held-out** set (seed 3) was not used for any tuning and is the fairer measure.
 
@@ -64,6 +64,6 @@ Each mode took about 1 second a page on the development PC (Windows 11, Node.js 
 ## Limitations
 
 - **The photos are simulated.** They are built from the same TCGdex pictures that the reference fingerprints are made from. So they test robustness to placement, sleeves, glare, blur and noise, but not to differences between a printed card and its scan: colour, print variation, wear, holographic foil, real binder plastic or camera processing. Real-world accuracy is expected to be lower. It has not been measured on real photographs.
-- Only English cards with a picture in the catalog are used. Japanese, Korean and Chinese cards are not in the catalog.
+- Only English cards with a picture in the catalogue are used. Japanese, Korean and Chinese cards are not in the catalogue.
 - The wrong cards are random cards from other sets. A wrong card from the same set, or a reprint of the right card, is a harder case that this set barely covers.
 - The results are for the scanner on a desktop PC in Node.js, not in a phone's browser. The code is the same, but timings differ.

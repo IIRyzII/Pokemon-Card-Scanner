@@ -48,7 +48,12 @@ Your real binders, page by page, are in the **Binders** tab.
     - First come the **promo versions** of the set's own cards: cosmos and other special holos from blister packs and boxes, stamped ones (a set logo from Build & Battle boxes, GameStop, EB Games, staff, prerelease) and the non-holo theme-deck versions of holo rares.
     - Then come the set's **stamped promo cards**: its Build & Battle and prerelease promos from the Black Star Promos, stamped with the set's logo.
     - Their pockets say "promo".
-- Each pocket shows its card in colour when the collection has a copy in that printing, and greyed out when it doesn't. A footnote says which printing goes there (Regular, Holo, Reverse Holo…). Each copy fills one pocket, so 4 Shuckles fill 4 of the 9 kept for that card.
+- Each pocket shows its card in colour when the collection has a copy in that printing, and greyed out when it doesn't. The same is shown without colour too:
+  - Each page says how many of its pockets are filled, for example "6/9".
+  - Editors see the number of copies under each card.
+  - Screen readers announce each pocket as "You have it" or "Missing".
+  - **Missing** lists every empty pocket.
+- A footnote under each pocket says which printing goes there (Regular, Holo, Reverse Holo…). Each copy fills one pocket, so 4 Shuckles fill 4 of the 9 kept for that card.
 - **+ and −** under each card (and in **Missing**) add a copy in that printing to the collection (raw, near mint, English) or take one out, in one tap. The pocket changes at once. − takes out the raw copy added last; a graded slab is only taken out on its own page.
 - **Scan a whole page**: tap **Scan** on a page, line the real page up with the grid (each pocket labelled with its card's number) and take one photo, or use a photo you already have.
   - Every pocket is checked against the card that goes in it, so the printing is the pocket's (a reverse holo and a regular one look the same).
@@ -87,8 +92,8 @@ The **Wants** tab lists every card you still need, set by set, and what getting 
 
 | Price | Source | Notes |
 |---|---|---|
-| Raw market price | TCGplayer (USD), via TCGdex; Cardmarket (EUR), from Cardmarket's own daily price guide through the catalog's checked links | Refreshed for cards in the collection when you open the app (if more than 6 hours old) and at least daily in the background. A special printing (a cosmos holo, a stamped version) is priced from its own Cardmarket product; until it has one, its plain printing's price is used, and the app says so. |
-| Set values | The same market prices for every card in the catalog | One near-mint copy of each card's standard printing. Refreshed when the site rebuilds. |
+| Raw market price | TCGplayer (USD), via TCGdex; Cardmarket (EUR), from Cardmarket's own daily price guide through the catalogue's checked links | Refreshed for cards in the collection when you open the app (if more than 6 hours old) and at least daily in the background. A special printing (a cosmos holo, a stamped version) is priced from its own Cardmarket product; until it has one, its plain printing's price is used, and the app says so. |
+| Set values | The same market prices for every card in the catalogue | One near-mint copy of each card's standard printing. Refreshed when the site rebuilds. |
 | eBay "last sold" | You log them in the app | eBay has no public sold-listings API, so each grade has a one-tap link to eBay's sold results. |
 | Graded price points | PriceCharting (optional) | Needs a paid PriceCharting subscription. |
 | Exchange rates | European Central Bank daily reference rates | The API fetches them twice a day. |
@@ -100,7 +105,7 @@ The **Wants** tab lists every card you still need, set by set, and what getting 
 
 ## Sets and artists
 
-- **Sets**: every set in the **Sets** tab, with how close you are to completing it, what the whole set is worth at market prices, what your cards from it are worth, and what completing it would cost. Open a set to see every card in number order, with its price and the ones you're missing greyed out.
+- **Sets**: every set in the **Sets** tab, with how close you are to completing it, what the whole set is worth at market prices, what your cards from it are worth, and what completing it would cost. Open a set to see every card in number order, with its price and the ones you're missing greyed out. Choose **Owned** or **Missing** to list only those, and the page says how many of the set's cards you have.
 - **Artists** (under the **Sets** tab): sort your collection by illustrator, browse every artist's cards and see which ones you own.
 
 ## Accounts and roles
@@ -127,13 +132,13 @@ The API enforces roles on every request, so hiding a button in the app is never 
 ## Scanning tips
 
 - Show the card to the camera with the whole card in view, keep it flat, and avoid glare from holo foil. It doesn't need to fill the frame or be straight. The light button helps in dim rooms.
-- The scanner outlines the card it has found, straightens it, and compares its picture with every card in the catalog several times a second.
+- The scanner outlines the card it has found, straightens it, and compares its picture with every card in the catalogue several times a second.
 - **Auto-scan** is on by default, so you don't need to press anything.
   - A close, clear picture match is picked straight away, upside down too.
   - **Glare** and shaky hands can stop any single look from being sure, so the scanner also compares the last few looks and picks the card that stays clearly closest across them. Tilting the card a little helps, as the glare moves.
   - **Sleeves and top loaders**: the edge found can be the sleeve's, not the card's. When the picture inside that edge doesn't match well, it also tries the card inside the margins sleeves leave, and keeps whichever matches best. On a busy, colourful surface the edge of a top loader can be missed altogether: a plain table works best.
   - **A card in a binder pocket** sits among other edges, and the most card-shaped outline is often the pocket itself. When the picture inside that outline doesn't match well, the scanner tries the other outlines it found. Point the camera at one card, so it fills most of the view.
-  - **Reprints** share their artwork with other printings (Base Set and Base Set 2 Charizard, say), so the scanner then reads the printed number or set. That small print needs a sharp picture, so it asks you to hold still for a moment; the outline turns green when it's still enough.
+  - **Reprints** share their artwork with other printings (Base Set and Base Set 2 Charizard, say), so the scanner then reads the printed number or set. That small print needs a sharp picture, so it asks you to hold still for a moment. When the card is still enough, the outline turns green and the message under the camera changes from "Hold the card steady…" to "Reading…". Screen readers announce the message.
   - It never picks a card it isn't sure of. If it can't be, it keeps trying on new frames; tap the shutter to see the closest matches yourself.
   - **Scan again** won't pick up the same card while it's still in view.
   - Turn it off with the **Auto-scan** button under the camera.

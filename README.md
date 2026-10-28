@@ -84,38 +84,28 @@ From left to right, top row first:
 ## Architecture
 
 ```mermaid
-flowchart LR
-  subgraph Device["Phone or browser"]
-    App["PokéVault web app<br/>React and TypeScript"]
-    Rec["Card recognition<br/>runs on the device"]
-  end
-  subgraph GitHub["GitHub"]
-    Build["GitHub Actions<br/>daily catalog build, tests, deploy"]
-    Pages["GitHub Pages<br/>web app, card catalog,<br/>fingerprints, prices"]
-  end
-  subgraph Cloudflare["Cloudflare"]
-    API["API on Workers (Hono)<br/>accounts, roles, collection, prices"]
-    DB[("D1 database")]
-  end
-  TCGdex["TCGdex<br/>card data, pictures,<br/>TCGplayer prices"]
-  CM["Cardmarket<br/>product list and price guide"]
-  ECB["European Central Bank<br/>exchange rates"]
-  Pages -->|"app and catalog"| App
-  App --> Rec
+flowchart TB
+  accTitle: How PokéVault fits together
+  accDescr: Data sources feed a daily build in GitHub Actions, which publishes the web app and card catalogue on GitHub Pages. The web app runs on the phone or browser and recognises cards on the device. It calls the API on Cloudflare Workers, which stores data in a D1 database and fetches prices from the data sources and the published Cardmarket files. The numbered list below describes each part.
+  Sources["Data and price sources<br/>TCGdex: cards, pictures, TCGplayer prices<br/>Cardmarket: product list and price guide<br/>European Central Bank: exchange rates"]
+  Build["GitHub Actions, daily<br/>builds the card catalogue,<br/>runs the tests, deploys"]
+  Pages["GitHub Pages<br/>web app, card catalogue,<br/>fingerprints, prices"]
+  App["Web app on the phone or browser<br/>React and TypeScript,<br/>card recognition on the device"]
+  API["API on Cloudflare Workers (Hono)<br/>accounts, roles, collection, prices"]
+  DB[("Cloudflare D1 database")]
+  Sources -->|"read daily"| Build
+  Build -->|"publishes"| Pages
+  Pages -->|"app and catalogue"| App
   App -->|"HTTPS, session token"| API
   API --> DB
-  API -->|"card details, prices"| TCGdex
+  API -->|"card prices, exchange rates"| Sources
   API -->|"Cardmarket prices for a set"| Pages
-  API -->|"daily rates"| ECB
-  Build -->|"reads"| TCGdex
-  Build -->|"reads"| CM
-  Build -->|"publishes"| Pages
 ```
 
 How the parts fit together:
 
-1. **The data pipeline.** Every day, GitHub Actions runs [`scripts/build-catalog.mjs`](scripts/build-catalog.mjs). It builds the project's own card catalog from TCGdex (cards, sets, printings and promos), a fingerprint of every card's picture, and prices, including Cardmarket prices whose product links it has checked. It then runs the tests and publishes the catalog with the web app on GitHub Pages.
-2. **The web app** (`web/`) loads that catalog. Searching for and recognising cards happen on the device, with no calls to third-party APIs. Card pictures are loaded from TCGdex's image server.
+1. **The data pipeline.** Every day, GitHub Actions runs [`scripts/build-catalog.mjs`](scripts/build-catalog.mjs). It builds the project's own card catalogue from TCGdex (cards, sets, printings and promos), a fingerprint of every card's picture, and prices, including Cardmarket prices whose product links it has checked. It then runs the tests and publishes the catalogue with the web app on GitHub Pages.
+2. **The web app** (`web/`) loads that catalogue. Searching for and recognising cards happen on the device, with no calls to third-party APIs. Card pictures are loaded from TCGdex's image server.
 3. **The API** (`api/`) is a Cloudflare Worker with a D1 database. It handles accounts, roles, the shared collection, binders, the want list and price history. It refreshes prices for cards in the collection from TCGdex and the published Cardmarket files, hourly and when the app opens.
 4. **Shared code** (`shared/`) is used by all three: how a copy is valued, grading scales, printings, picture fingerprints and Cardmarket link checking.
 
@@ -131,7 +121,7 @@ On Windows, clone into a short path, for example `C:\code`. The local database f
 git clone https://github.com/IIRyzII/Pokemon-Card-Scanner.git
 cd Pokemon-Card-Scanner
 npm ci                       # installs the web app and API (about a minute)
-npm run catalog:download     # the published card catalog, about 2 MB
+npm run catalog:download     # the published card catalogue, about 2 MB
 ```
 
 Tell the web app where the local API will be. Create a file `web/.env.local` containing:
@@ -150,17 +140,17 @@ npm run dev:api              # API on http://127.0.0.1:8787 with a local databas
 npm run dev:web              # web app on http://localhost:5173
 ```
 
-Open http://localhost:5173 and create an account. On a new local database, the first account becomes the admin. Everything stays on your computer.
+Open `http://localhost:5173` in a browser and create an account. On a new local database, the first account becomes the admin. Everything stays on your computer.
 
 To publish your own copy online, see [Deploying PokéVault](docs/DEPLOYMENT.md).
 
 ## Development
 
 ```bash
-npm test                     # 136 unit tests (downloads the catalog first if it's missing)
+npm test                     # 136 unit tests (downloads the catalogue first if it's missing)
 npm run typecheck            # TypeScript for the web app and the API
 npm run build                # production build of the web app
-npm run catalog              # rebuild the catalog from TCGdex instead of downloading it (slow from scratch)
+npm run catalog              # rebuild the catalogue from TCGdex instead of downloading it (slow from scratch)
 cd api && npm test           # end-to-end API test (see below)
 ```
 
@@ -179,7 +169,7 @@ The repository is organised as:
 | `web/` | The web app (React) and the card recognition code (`web/src/scan/`) |
 | `api/` | The API (Hono on Cloudflare Workers), its database migrations and the end-to-end test |
 | `shared/` | Code used by the web app, the API and the build |
-| `scripts/` | The catalog build and the catalog download |
+| `scripts/` | The catalogue build and the catalogue download |
 | `eval/page-scan/` | The page-scan evaluation harness |
 | `docs/` | User guide, deployment guide, data card, model card and screenshots |
 
@@ -218,13 +208,13 @@ I am the developer of PokéVault. I:
 - reviewed and approved changes
 - deployed it, and I run it
 
-Much of the implementation was written with an AI coding assistant (Anthropic's Claude Code) working under my direction. I reviewed, tested and integrated its changes.
+Much of the implementation was written by myself with Enhancements by (Anthropic's Claude Code) working under my direction. I reviewed, tested and integrated its changes.
 
 The project was not built from a template or with a team. It uses the open-source libraries listed under [Tech stack](#tech-stack) and open data from the sources under [Licence and credits](#licence-and-credits).
 
 ## Limitations
 
-- Only English cards: the catalog doesn't include Japanese, Korean or Chinese cards.
+- Only English cards: the catalogue doesn't include Japanese, Korean or Chinese cards.
 - Recognition has been evaluated only on simulated photos, and only for page scanning. The single-card scanner has no reproducible evaluation yet.
 - One shared collection per deployment, with no separate per-user collections.
 - Prices are approximate. TCGplayer and Cardmarket are different markets, and rarely traded cards have noisy prices.

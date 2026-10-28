@@ -29,7 +29,7 @@ Settings in `api/wrangler.jsonc`:
 
 - `CURRENCY`: the currency the collection is valued in (GBP, USD, EUR, CAD or AUD).
 - `ALLOWED_ORIGINS`: the web addresses allowed to call the API. Set it to your GitHub Pages address (or custom domain) and run `npm run deploy` again.
-- `CATALOG_URL`: where your published card catalog is (your GitHub Pages address followed by `/catalog`).
+- `CATALOG_URL`: where your published card catalogue is (your GitHub Pages address followed by `/catalog`).
 - `REGISTRATION`: `open` lets anyone create a *Pending* account; `closed` means only admins can create accounts.
 
 To publish API changes later, run `npm run deploy` in `api/`. It applies any new database migrations and then publishes the Worker. Pushing to GitHub does not deploy the API unless you add the secrets below.
@@ -39,7 +39,7 @@ To publish API changes later, run `npm run deploy` in `api/`. It applies any new
 1. On GitHub: **Settings → Pages → Source: GitHub Actions**.
 2. Push to `main`, or go to **Actions → Deploy web app → Run workflow**.
 
-The workflow builds the card catalog from TCGdex, runs the unit tests, builds the app and publishes it. It also runs every day to refresh prices and pick up new sets.
+The workflow builds the card catalogue from TCGdex, runs the unit tests, builds the app and publishes it. It also runs every day to refresh prices and pick up new sets.
 
 ## 4. Create your admin account
 

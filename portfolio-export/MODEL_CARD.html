@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PokéVault: model card</title><style>
+  :root { color: #1a1a1a; background: #fff; }
+  body { font: 11pt/1.5 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; margin: 0; }
+  main { max-width: 46em; margin: 0 auto; padding: 1.5em 1em; }
+  h1 { font-size: 1.9em; margin: 0 0 .4em; }
+  h2 { font-size: 1.4em; margin: 1.4em 0 .5em; padding-bottom: .2em; border-bottom: 1px solid #ccc; }
+  h3 { font-size: 1.15em; margin: 1.2em 0 .4em; }
+  h1, h2, h3 { break-after: avoid; line-height: 1.25; }
+  a { color: #0b57d0; }
+  code { font-family: Consolas, "Cascadia Mono", monospace; font-size: .92em; background: #f2f2f2; padding: .05em .3em; border-radius: 3px; }
+  pre { background: #f2f2f2; padding: .7em .9em; border-radius: 4px; white-space: pre-wrap; word-break: break-word; break-inside: avoid; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8em 0; font-size: .95em; break-inside: auto; }
+  th, td { border: 1px solid #bbb; padding: .35em .5em; text-align: left; vertical-align: top; }
+  th { background: #eef1f5; }
+  tr { break-inside: avoid; }
+  img { max-width: 100%; height: auto; }
+  p > img { max-width: 31%; margin: 0 1% .5em 0; vertical-align: top; border: 1px solid #ddd; break-inside: avoid; }
+  .mermaid { margin: 1em 0; break-inside: avoid; text-align: center; }
+  .mermaid svg { max-width: 100%; height: auto; }
+  li { margin: .15em 0; }
+</style></head>
+<body><main id="content"><h1 id="model-card-pokévault-card-recognition">Model card: PokéVault card recognition</h1>
+<p>This card follows the structure of Mitchell et al. (2019), "Model Cards for Model Reporting". The system it describes is <strong>not a trained machine-learning model</strong>. It is a fixed pipeline: card outline detection, perceptual-hash matching with hand-set thresholds, and a pretrained third-party OCR model. It is documented in model-card form because its outputs are probabilistic, can be wrong, and are used to make decisions about what is added to a collection. Facts come from the code in this repository and from the evaluation in <a href="https://github.com/IIRyzII/Pokemon-Card-Scanner/blob/element-b-submission/eval/page-scan/README.md"><code>eval/page-scan</code></a>. Anything not yet confirmed is marked <strong>TODO (Ryley)</strong>.</p>
+<h2 id="model-details">Model details</h2>
+<ul>
+<li><strong>Developer:</strong> Ryley Griffiths, as part of PokéVault.</li>
+<li><strong>Date:</strong> October 2026.</li>
+<li><strong>Version:</strong> the code at the tag <code>element-b-submission</code> of this repository.</li>
+<li><strong>Licence:</strong> the code is not licensed for reuse (all rights reserved). Third-party components keep their own licences (below).</li>
+<li><strong>Contact:</strong> through the <a href="https://github.com/IIRyzII">GitHub profile</a>.</li>
+</ul>
+<p><strong>Type.</strong> Three parts, all running in the user's browser (<code>web/src/scan/</code> and <code>shared/cardprint.ts</code>):</p>
+<ol>
+<li><strong>Card finding</strong> (<code>detect.ts</code>, <code>locate.ts</code>, <code>warp.ts</code>).<ul>
+<li>Finds the four corners of the most card-like rectangle in a frame: colour edges, then a Hough transform limited to near-upright lines, then the best combination of four lines with a card's proportions.</li>
+<li>Then straightens the card with a perspective transform.</li>
+<li>When a card is in a binder pocket or a sleeve, it also considers other outlines and the margins sleeves leave.</li>
+</ul>
+</li>
+<li><strong>Picture matching</strong> (<code>shared/cardprint.ts</code>, <code>lib/pictures.ts</code>).<ul>
+<li>Computes a 286-bit perceptual hash of the straightened card. The <a href="https://github.com/IIRyzII/Pokemon-Card-Scanner/blob/element-b-submission/docs/DATA_CARD.md#2-card-picture-fingerprints">data card</a> describes how.</li>
+<li>Finds the nearest of about 21,000 reference fingerprints by Hamming distance, trying the card both ways up.</li>
+<li>Decides with fixed thresholds (below) whether the closest match is clear.</li>
+</ul>
+</li>
+<li><strong>Text reading</strong> (<code>ocr.ts</code>, <code>parse.ts</code>, <code>lib/match.ts</code>).<ul>
+<li>When the picture can't settle it, for example between reprints with the same artwork, reads the card's name and number with Tesseract OCR.</li>
+<li>Uses tesseract.js 7.0.0 (Apache-2.0) with its pretrained English LSTM model (<code>eng</code>, <code>4.0.0_best_int</code>).</li>
+<li>Ranks catalogue cards by what was read.</li>
+</ul>
+</li>
+</ol>
+<p><strong>Whole binder pages</strong> (<code>pageScan.ts</code>) apply parts 1 and 2 to each pocket of a photo lined up with an on-screen grid, in two modes:</p>
+<ul>
+<li><strong>Check:</strong> in a binder in the app, each pocket is compared with the card that belongs there.</li>
+<li><strong>Read:</strong> in the scanner, each pocket's card is recognised from scratch.</li>
+</ul>
+<p><strong>Decision thresholds.</strong> These are Hamming distances out of 286 bits. They were set by hand during development using simulated data. None are learned.</p>
+<table>
+<thead>
+<tr>
+<th>Threshold</th>
+<th>Value</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Clear match</td>
+<td>≤ 70 bits, and the next different card ≥ 20 bits further away</td>
+<td>Naming a card from one look</td>
+</tr>
+<tr>
+<td>Reprint "twins"</td>
+<td>within 40 bits of the best, same name</td>
+<td>Offering reprints as choices (the printed number decides)</td>
+</tr>
+<tr>
+<td>Settled over several looks</td>
+<td>average ≤ 82 bits, gap ≥ 14 bits</td>
+<td>Auto-scan of a moving card</td>
+</tr>
+<tr>
+<td>Page check: the pocket's card is there</td>
+<td>≤ 82 bits, and ≥ 10 bits closer than any other card</td>
+<td>Ticking a pocket in a binder</td>
+</tr>
+<tr>
+<td>Page read: "probably"</td>
+<td>≤ 82 bits, gap ≥ 10 bits</td>
+<td>Offering a likely card, unticked</td>
+</tr>
+</tbody></table>
+<h2 id="intended-use">Intended use</h2>
+<ul>
+<li><strong>Primary use:</strong> identifying English Pokémon Trading Card Game cards from a phone camera or photo, so a collector can add them to their collection quickly: one card, a stack one at a time, or a whole binder page.</li>
+<li><strong>Users:</strong> collectors using PokéVault.</li>
+<li><strong>A person always confirms.</strong> Nothing is saved without the user's confirmation:<ul>
+<li>A single card is added only after the user picks the match and confirms the details.</li>
+<li>Page scans tick only clear results, and the user reviews and can untick any pocket before adding.</li>
+</ul>
+</li>
+<li><strong>Out of scope:</strong><ul>
+<li>Judging whether a card is genuine.</li>
+<li>Grading a card's condition.</li>
+<li>Non-English cards.</li>
+<li>Any automated decision without a person's review.</li>
+<li>Recognising anything other than catalogue cards.</li>
+</ul>
+</li>
+</ul>
+<h2 id="factors">Factors</h2>
+<p>These factors were expected to affect accuracy:</p>
+<ul>
+<li><strong>Card factors:</strong> era and layout (vintage and modern frames), reprints that share artwork, mostly flat-coloured cards (some Energy cards), holographic foil.</li>
+<li><strong>Capture factors:</strong> glare, lighting, blur and camera shake, sleeves and top loaders, binder pocket plastic, page alignment with the guide, background.</li>
+</ul>
+<p>The evaluation reports results overall and for cards in penny sleeves. It does not break results down by era, card type, page layout or device. Adding a per-layout and per-era breakdown to <code>score.mjs</code> is a recommended next step.</p>
+<h2 id="metrics">Metrics</h2>
+<p>The metrics put the cost of a silent mistake first: a wrong card, or a card in an empty pocket, being added without the user noticing. They are:</p>
+<ul>
+<li><strong>False acceptance:</strong><ul>
+<li>a wrong card, or an empty pocket, ticked as the pocket's card (check mode)</li>
+<li>a card ticked as the wrong card, or an empty pocket ticked as a card (read mode)</li>
+</ul>
+</li>
+<li><strong>Found rate:</strong> the share of present cards ticked correctly.</li>
+<li><strong>Not sure:</strong> present cards left for the user to decide. This is a cost in effort, not a mistake.</li>
+<li><strong>Exact card among the choices:</strong> whether the user can pick the right printing from what is offered.</li>
+</ul>
+<p>The thresholds were chosen so that false acceptance is zero on the development data, accepting more "not sure" results in return.</p>
+<h2 id="evaluation-data">Evaluation data</h2>
+<ul>
+<li><strong>Data:</strong> simulated photos of binder pages (<a href="https://github.com/IIRyzII/Pokemon-Card-Scanner/blob/element-b-submission/docs/DATA_CARD.md#5-simulated-page-photo-evaluation-set">data card, dataset 5</a>).</li>
+<li><strong>Held-out set:</strong> seed 3, 60 pages, 468 cards. It was generated from the catalogue built on 28 October 2026 and used only for evaluation.</li>
+<li><strong>Development sets:</strong> seeds 1 and 2, 80 pages, regenerated with the same catalogue. They are reported for comparison.</li>
+</ul>
+<p>The simulated photos include sleeves, glare, haze, misalignment, tilt, noise, blur, empty pockets and wrong cards.</p>
+<h2 id="training-data">Training data</h2>
+<p>There is no training data, because nothing is learned:</p>
+<ul>
+<li><strong>Reference fingerprints:</strong> computed from the catalogue's card pictures (<a href="https://github.com/IIRyzII/Pokemon-Card-Scanner/blob/element-b-submission/docs/DATA_CARD.md#2-card-picture-fingerprints">data card, dataset 2</a>).</li>
+<li><strong>Thresholds:</strong> set by hand during development using simulated pages from the same generator, with seeds 1 and 2 and an earlier catalogue build.</li>
+<li><strong>OCR model:</strong> Tesseract's English model was trained by its authors, not as part of this project. <strong>TODO (Ryley): confirm the licence of the <code>@tesseract.js-data/eng</code> language data.</strong></li>
+</ul>
+<h2 id="quantitative-analyses">Quantitative analyses</h2>
+<p>Held-out set (seed 3, 60 pages); full results are in <a href="https://github.com/IIRyzII/Pokemon-Card-Scanner/blob/element-b-submission/eval/page-scan/README.md"><code>eval/page-scan/README.md</code></a>:</p>
+<table>
+<thead>
+<tr>
+<th>Measure</th>
+<th>Check a binder's page</th>
+<th>Read a page of any cards</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Present cards</td>
+<td>423</td>
+<td>468</td>
+</tr>
+<tr>
+<td>Found and ticked correctly</td>
+<td>393 (92.9%)</td>
+<td>402 (85.9%)</td>
+</tr>
+<tr>
+<td>Ticked wrongly (false acceptance)</td>
+<td>0 of 45 wrong cards</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Empty pockets ticked (false acceptance)</td>
+<td>0 of 42</td>
+<td>0 of 42</td>
+</tr>
+<tr>
+<td>Left for the user ("not sure", "probably" or not recognised)</td>
+<td>30</td>
+<td>66 (19 offered as "probably", all right)</td>
+</tr>
+<tr>
+<td>Cards in penny sleeves found</td>
+<td>116 of 124 (93.5%)</td>
+<td>not reported</td>
+</tr>
+<tr>
+<td>Exact card among the choices offered</td>
+<td>not applicable</td>
+<td>435 (92.9%)</td>
+</tr>
+</tbody></table>
+<p>The two development sets gave similar results (93.4% found in check mode; 86.3% in read mode; no false acceptances). In read mode, 2 of the 24 "probably" suggestions were wrong; these are not ticked by default.</p>
+<p><strong>Not evaluated reproducibly in this repository:</strong></p>
+<ul>
+<li>The single-card and stack scanners.</li>
+<li>Accuracy on real photographs.</li>
+<li>Speed on phones (the evaluation took about 1 second a page per mode on a desktop PC).</li>
+</ul>
+<p>Some code comments record figures from earlier development experiments whose scripts are not included (in <code>shared/cardprint.ts</code> and <code>web/src/lib/pictures.ts</code>, for example). They should be treated as development notes, not results.</p>
+<h2 id="ethical-considerations">Ethical considerations</h2>
+<ul>
+<li><strong>Privacy:</strong><ul>
+<li>Recognition runs entirely in the browser. Camera frames and photos are not stored or sent to PokéVault's API.</li>
+<li>Starting the OCR engine downloads its program and language model from the public jsDelivr CDN. That request reveals the user's IP address to the CDN, but sends no images.</li>
+</ul>
+</li>
+<li><strong>Mistakes:</strong> a wrong identification leads to a wrong card or value in the collection. This is mitigated by human confirmation and by favouring "not sure" over guessing. No result is used for anything beyond the user's own collection.</li>
+<li><strong>Intellectual property:</strong> the reference fingerprints are derived from card pictures owned by The Pokémon Company. Only the fingerprints are published, not the pictures.</li>
+<li><strong>Security:</strong> adversarial robustness has not been assessed. Perceptual hashes can be deliberately collided, so a crafted image could be made to match a different card. In this app, the impact is limited to a user misrecording their own collection.</li>
+</ul>
+<h2 id="caveats-and-recommendations">Caveats and recommendations</h2>
+<ul>
+<li>The reported accuracy is from simulated photos built from the same pictures as the reference fingerprints, so it is expected to be optimistic. The next step is a small labelled set of real phone photos of cards and binder pages, with results reported on it.</li>
+<li>Report results by page layout, card era and card type, and measure speed on a phone.</li>
+<li>The single-card scanner needs a reproducible evaluation like the page scanner's.</li>
+<li>Thresholds are global. Cards that are mostly flat colour, and reprints with shared artwork, are the main known sources of "not sure" results.</li>
+</ul>
+</main>
+
+</body></html>

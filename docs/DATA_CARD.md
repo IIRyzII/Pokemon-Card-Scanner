@@ -1,18 +1,18 @@
 # Data card: PokéVault
 
-This card documents every dataset PokéVault uses or produces. It is structured after Google's Data Cards Playbook and Gebru et al.'s "Datasheets for Datasets". Facts come from the code in this repository and the published catalog built on 28 October 2026. Anything not yet confirmed is marked **TODO (Ryley)**.
+This card documents every dataset PokéVault uses or produces. It is structured after Google's Data Cards Playbook and Gebru et al.'s "Datasheets for Datasets". Facts come from the code in this repository and the published catalogue built on 28 October 2026. Anything not yet confirmed is marked **TODO (Ryley)**.
 
 ## Contents
 
 | Dataset | What it is | Where it lives | Personal data |
 |---|---|---|---|
-| [1. Card catalog](#1-card-catalog) | Every English Pokémon card and set | Built daily; published with the web app (`catalog/catalog.json`) | Illustrators' credited names only |
+| [1. Card catalogue](#1-card-catalogue) | Every English Pokémon card and set | Built daily; published with the web app (`catalog/catalog.json`) | Illustrators' credited names only |
 | [2. Card picture fingerprints](#2-card-picture-fingerprints) | A 286-bit fingerprint of each card's picture | Published with the web app (`catalog/prints.bin`) | None |
 | [3. Market prices](#3-market-prices) | Card prices from TCGplayer, Cardmarket and optionally PriceCharting, plus exchange rates | Published files and API database tables | None |
 | [4. Accounts and collection database](#4-accounts-and-collection-database) | Users, sessions, the shared collection, binders, want list, audit log | Cloudflare D1 (the API's database) | Yes: see section 4 |
 | [5. Simulated page-photo evaluation set](#5-simulated-page-photo-evaluation-set) | Generated photos of binder pages with known contents | Generated locally, not committed | None |
 
-## 1. Card catalog
+## 1. Card catalogue
 
 **Summary.** A compact index of every English Pokémon Trading Card Game card that the app can search, scan and value. The 28 October 2026 build holds 21,256 cards in 205 sets, 399 illustrators, 31 rarities and 3 categories (Pokémon, Trainer, Energy), in about 1.2 MB of JSON.
 
@@ -20,7 +20,7 @@ This card documents every dataset PokéVault uses or produces. It is structured 
 
 - Sets, cards, rarities, illustrators, HP and printings come from the [TCGdex](https://tcgdex.dev) API (`https://api.tcgdex.net/v2/en`, REST and GraphQL).
 - For about 50 sets where TCGdex marks every card "normal" (mostly Black & White, XY and Sun & Moon), printings are inferred from each card's rarity in the [pokemon-tcg-data](https://github.com/PokemonTCG/pokemon-tcg-data) files.
-- Card pictures are not copied. The catalog stores a link base (`https://assets.tcgdex.net/en`). Where TCGdex has no picture, the app falls back to `images.pokemontcg.io` at display time.
+- Card pictures are not copied. The catalogue stores a link base (`https://assets.tcgdex.net/en`). Where TCGdex has no picture, the app falls back to `images.pokemontcg.io` at display time.
 
 **Licence and terms.**
 
@@ -67,7 +67,7 @@ Each card row is an array:
 | 12 | Printings found only in promos (or 0) | `["holo~cosmos"]` |
 | 13 | For a stamped promo card, the set card it reprints (or 0) | `0` |
 
-`meta.json` records the build time, card, set and artist counts, and a hash of each published file. The app uses it to know when to download a new catalog.
+`meta.json` records the build time, card, set and artist counts, and a hash of each published file. The app uses it to know when to download a new catalogue.
 
 **Personal or sensitive data.** None, apart from illustrators' names as credited on the cards. They are public professional attributions and are used only to group and browse cards by artist.
 
@@ -85,13 +85,13 @@ Each card row is an array:
 
 **Maintenance.**
 
-- Rebuilt every day and on every push to `main`. If a build fails, the previously published catalog is reused.
+- Rebuilt every day and on every push to `main`. If a build fails, the previously published catalogue is reused.
 - The format version and per-file hashes let the app and the build detect changes.
 - Owner: Ryley Griffiths.
 
 ## 2. Card picture fingerprints
 
-**Summary.** A perceptual fingerprint ("pHash") of every card picture in the catalog. The scanner compares the card it sees against these to recognise it on the device, with no image sent anywhere. The published file is 765,216 bytes: 36 bytes for each of the 21,256 cards, in catalog order.
+**Summary.** A perceptual fingerprint ("pHash") of every card picture in the catalogue. The scanner compares the card it sees against these to recognise it on the device, with no image sent anywhere. The published file is 765,216 bytes: 36 bytes for each of the 21,256 cards, in catalogue order.
 
 **Source and provenance.** Computed by `scripts/build-catalog.mjs` from each card's small picture on TCGdex (`low.jpg`). Fingerprints from the previous build are reused, so only new cards' pictures are downloaded.
 
@@ -112,7 +112,7 @@ This gives 2 × 143 = 286 bits, stored as nine 32-bit words, with all zeros mean
 
 **Intended uses.** Recognising a card from a photo, in the browser.
 
-**Out-of-scope uses.** Recovering card pictures (a fingerprint is far too coarse) and identifying anything other than cards in the catalog.
+**Out-of-scope uses.** Recovering card pictures (a fingerprint is far too coarse) and identifying anything other than cards in the catalogue.
 
 **Known limitations and biases.**
 
@@ -122,13 +122,13 @@ This gives 2 × 143 = 286 bits, stored as nine 32-bit words, with all zeros mean
 
 See the [model card](MODEL_CARD.md) for how recognition uses it.
 
-**Maintenance.** Rebuilt with the catalog. Owner: Ryley Griffiths.
+**Maintenance.** Rebuilt with the catalogue. Owner: Ryley Griffiths.
 
 ## 3. Market prices
 
 **Summary.** The prices the app values cards with. It has three parts:
 
-- **Published with the catalog:**
+- **Published with the catalogue:**
   - `prices.json`: one near-mint price for each card's standard printing, for set values.
   - `cardmarket/<set>.json`: Cardmarket prices per card and per special printing.
 - **Kept by the API in its database:**
@@ -154,12 +154,12 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 
 - **Checking Cardmarket links.** TCGdex links some cards to the wrong Cardmarket product. For example, it links EX Deoxys's Gold Star Rayquaza to the plain Rayquaza from the same set. So the build checks every link against Cardmarket's product name and attacks and corrects the wrong ones. Where several products look alike, it uses the order Cardmarket numbers them in. Each build prints how many links it confirmed, corrected or could not find.
 - **Special printings.** A special printing (a cosmos holo, a stamped card) is priced from its own Cardmarket product. Until it has one, the app uses the plain printing's price and says so.
-- **Set values.** `prices.json` gives each card's standard printing in USD (TCGplayer) or else EUR (Cardmarket), in catalog order.
+- **Set values.** `prices.json` gives each card's standard printing in USD (TCGplayer) or else EUR (Cardmarket), in catalogue order.
 - **Conversion.** The API converts prices into the collection's currency with the ECB's rates.
 
 **Schema.**
 
-- **`prices.json`:** `{ version, updated, usd: (number | null)[], eur: (number | null)[] }`, one entry per catalog card. In the 28 October 2026 build, 17,441 cards have a USD price and 3,221 a EUR price.
+- **`prices.json`:** `{ version, updated, usd: (number | null)[], eur: (number | null)[] }`, one entry per catalogue card. In the 28 October 2026 build, 17,441 cards have a USD price and 3,221 a EUR price.
 - **`cardmarket/<set>.json`:** `{ version, updated, cards }`. In `cards`, a card id (or `cardId|printing` for a special printing) maps to either 0 (no product) or `[product id, trend, low, 30-day average, holo trend, holo low, holo 30-day average]` in EUR. Cardmarket's "holo" prices are the reverse holo's.
 - **API tables:** defined in `api/migrations/0001_init.sql` and `0002_currency.sql`. Prices are stored with their currency and the time they were fetched.
 
@@ -178,13 +178,13 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 - Markets differ. TCGplayer reflects the US market for English cards; Cardmarket reflects European sales of a card in any language.
 - Prices for rarely traded cards are noisy, and averages lag sudden moves.
 - Set values assume one near-mint copy of each card's standard printing.
-- Catalog prices are refreshed when the site rebuilds (TCGplayer's every 6 days, Cardmarket's daily). Prices for cards in the collection are refreshed by the API (see Maintenance).
+- Catalogue prices are refreshed when the site rebuilds (TCGplayer's every 6 days, Cardmarket's daily). Prices for cards in the collection are refreshed by the API (see Maintenance).
 - The link check reduces, but cannot remove, the chance of a card being matched to the wrong product. A card it can't settle is left without a Cardmarket price rather than given a wrong one.
 - Graded prices need a paid PriceCharting subscription; without one, graded copies are valued only from sales the users log.
 
 **Maintenance.**
 
-- Catalog prices are rebuilt daily with the catalog.
+- Catalogue prices are rebuilt daily with the catalogue.
 - For cards in the collection, the API's hourly job refreshes any price more than 20 hours old, and opening the app refreshes those more than 6 hours old.
 - Owner: Ryley Griffiths.
 
@@ -255,7 +255,7 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 
 **Summary.** Synthetic photos of binder pages, with a record of which card is in each pocket. They are used to measure the page scanner. They are generated on demand, not committed: the evaluation in this repository used 140 pages (seeds 1, 2 and 3).
 
-**Source and provenance.** `eval/page-scan/generate.py` composes each page from the catalog's card pictures, which it downloads from TCGdex into a local cache. It then adds pocket plastic haze, seams, sleeves, lamp glare, misalignment, tilt, noise, blur and JPEG compression.
+**Source and provenance.** `eval/page-scan/generate.py` composes each page from the catalogue's card pictures, which it downloads from TCGdex into a local cache. It then adds pocket plastic haze, seams, sleeves, lamp glare, misalignment, tilt, noise, blur and JPEG compression.
 
 **Licence and terms.** Derived from the card pictures (see dataset 1), so the generated images are not redistributed.
 
@@ -263,12 +263,12 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 
 - **Pages:** each page holds consecutive cards from one set.
 - **Pockets:** about 10% are left empty and about 10% hold a random card from another set; about 30% of cards are in penny sleeves.
-- **Repeatable:** the output is the same for a given seed and catalog build.
+- **Repeatable:** the output is the same for a given seed and catalogue build.
 
 **Schema.** `truth.json` holds:
 
 - the seed
-- the catalog build used (time and hash)
+- the catalogue build used (time and hash)
 - one entry per page: its file name, the pocket layout (columns and rows), the card that belongs in each pocket, the card actually in it (or null if empty), and whether each card is sleeved
 
 **Personal or sensitive data.** None.
@@ -281,6 +281,6 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 
 - Simulated, not photographed. Real cards differ from their scans (colour, print variation, wear, holographic foil), and real binder plastic and phone cameras behave differently. Results are therefore expected to be optimistic.
 - Wrong cards come from other sets, which is easier than a reprint of the right card.
-- Results depend on the catalog build (recorded in `truth.json`).
+- Results depend on the catalogue build (recorded in `truth.json`).
 
 **Maintenance.** The generator and scorer live in `eval/page-scan/`. Re-run them after changing the scanner. Owner: Ryley Griffiths.

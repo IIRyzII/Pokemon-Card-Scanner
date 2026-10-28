@@ -23,7 +23,7 @@ This card follows the structure of Mitchell et al. (2019), "Model Cards for Mode
 3. **Text reading** (`ocr.ts`, `parse.ts`, `lib/match.ts`).
    - When the picture can't settle it, for example between reprints with the same artwork, reads the card's name and number with Tesseract OCR.
    - Uses tesseract.js 7.0.0 (Apache-2.0) with its pretrained English LSTM model (`eng`, `4.0.0_best_int`).
-   - Ranks catalog cards by what was read.
+   - Ranks catalogue cards by what was read.
 
 **Whole binder pages** (`pageScan.ts`) apply parts 1 and 2 to each pocket of a photo lined up with an on-screen grid, in two modes:
 
@@ -52,7 +52,7 @@ This card follows the structure of Mitchell et al. (2019), "Model Cards for Mode
   - Grading a card's condition.
   - Non-English cards.
   - Any automated decision without a person's review.
-  - Recognising anything other than catalog cards.
+  - Recognising anything other than catalogue cards.
 
 ## Factors
 
@@ -61,7 +61,7 @@ These factors were expected to affect accuracy:
 - **Card factors:** era and layout (vintage and modern frames), reprints that share artwork, mostly flat-coloured cards (some Energy cards), holographic foil.
 - **Capture factors:** glare, lighting, blur and camera shake, sleeves and top loaders, binder pocket plastic, page alignment with the guide, background.
 
-The evaluation reports results overall and for cards in penny sleeves. It does not break results down by era, card type, page layout or device. **TODO (Ryley):** a per-layout and per-era breakdown can be added to `score.mjs`.
+The evaluation reports results overall and for cards in penny sleeves. It does not break results down by era, card type, page layout or device. Adding a per-layout and per-era breakdown to `score.mjs` is a recommended next step.
 
 ## Metrics
 
@@ -79,8 +79,8 @@ The thresholds were chosen so that false acceptance is zero on the development d
 ## Evaluation data
 
 - **Data:** simulated photos of binder pages ([data card, dataset 5](DATA_CARD.md#5-simulated-page-photo-evaluation-set)).
-- **Held-out set:** seed 3, 60 pages, 468 cards. It was generated from the catalog built on 28 October 2026 and used only for evaluation.
-- **Development sets:** seeds 1 and 2, 80 pages, regenerated with the same catalog. They are reported for comparison.
+- **Held-out set:** seed 3, 60 pages, 468 cards. It was generated from the catalogue built on 28 October 2026 and used only for evaluation.
+- **Development sets:** seeds 1 and 2, 80 pages, regenerated with the same catalogue. They are reported for comparison.
 
 The simulated photos include sleeves, glare, haze, misalignment, tilt, noise, blur, empty pockets and wrong cards.
 
@@ -88,8 +88,8 @@ The simulated photos include sleeves, glare, haze, misalignment, tilt, noise, bl
 
 There is no training data, because nothing is learned:
 
-- **Reference fingerprints:** computed from the catalog's card pictures ([data card, dataset 2](DATA_CARD.md#2-card-picture-fingerprints)).
-- **Thresholds:** set by hand during development using simulated pages from the same generator, with seeds 1 and 2 and an earlier catalog build.
+- **Reference fingerprints:** computed from the catalogue's card pictures ([data card, dataset 2](DATA_CARD.md#2-card-picture-fingerprints)).
+- **Thresholds:** set by hand during development using simulated pages from the same generator, with seeds 1 and 2 and an earlier catalogue build.
 - **OCR model:** Tesseract's English model was trained by its authors, not as part of this project. **TODO (Ryley): confirm the licence of the `@tesseract.js-data/eng` language data.**
 
 ## Quantitative analyses
@@ -127,7 +127,7 @@ Some code comments record figures from earlier development experiments whose scr
 
 ## Caveats and recommendations
 
-- The reported accuracy is from simulated photos built from the same pictures as the reference fingerprints, so it is expected to be optimistic. **TODO (Ryley):** build a small labelled set of real photos (your own cards and binder pages) and report results on it.
+- The reported accuracy is from simulated photos built from the same pictures as the reference fingerprints, so it is expected to be optimistic. The next step is a small labelled set of real phone photos of cards and binder pages, with results reported on it.
 - Report results by page layout, card era and card type, and measure speed on a phone.
 - The single-card scanner needs a reproducible evaluation like the page scanner's.
 - Thresholds are global. Cards that are mostly flat colour, and reprints with shared artwork, are the main known sources of "not sure" results.

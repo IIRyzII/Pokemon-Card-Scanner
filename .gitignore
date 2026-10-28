@@ -15,3 +15,6 @@ web/public/catalog/
 eval/page-scan/.cache/
 eval/page-scan/out/
 __pycache__/
+
+# The submission zip is made from the tag with `git archive`, so it never goes in the repository
+portfolio-export/*.zip
