@@ -190,7 +190,8 @@ export function PriceSection({ detail, focus, artist, canEdit, onDetail, onSales
               {cm.map((p) => (
                 <tr key={`c${p.variant}`}>
                   <td>
-                    {p.variant === 'holo' ? 'Holo / reverse' : 'Main'} <span className="faint small">Cardmarket · all languages</span>
+                    {p.variant === 'holo' ? 'Holo / reverse' : p.variant === 'main' ? 'Main' : variantLabel(p.variant)}{' '}
+                    <span className="faint small">Cardmarket · all languages</span>
                   </td>
                   <td>
                     <strong>{format(p.market, p.currency)}</strong>
