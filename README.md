@@ -125,6 +125,8 @@ The [data card](docs/DATA_CARD.md) documents each dataset, and the [model card](
 
 These steps were tested on a fresh clone on Windows 11 with Node.js 24.16.0. You need [Node.js](https://nodejs.org) 22.12 or newer, Git, and an internet connection. No accounts or API keys are needed to run it locally.
 
+On Windows, clone into a short path, for example `C:\code`. The local database file sits deep inside `api\.wrangler`, and Windows limits paths to 260 characters unless long paths are enabled.
+
 ```bash
 git clone https://github.com/IIRyzII/Pokemon-Card-Scanner.git
 cd Pokemon-Card-Scanner
