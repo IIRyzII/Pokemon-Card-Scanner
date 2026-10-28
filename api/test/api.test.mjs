@@ -134,19 +134,26 @@ try {
     assert.equal(data.item.addedByName, 'Bob');
   });
 
-  await check('raw reverse-holo 151 Pikachu ×2 gets a TCGplayer market value', async () => {
+  await check('raw reverse-holo 151 Pikachu ×2 gets a market value: TCGplayer, else Cardmarket', async () => {
     const { data } = await api('POST', '/api/collection', {
       token: B,
       body: { cardId: 'sv03.5-025', variant: 'reverse', grader: 'RAW', condition: 'NM', quantity: 2 },
       expect: 201,
     });
     pikachuId = data.item.id;
-    assert.equal(data.item.valueSource, 'tcgplayer', JSON.stringify(data.item));
     assert.equal(data.item.valueCurrency, 'GBP');
-    assert.match(data.item.valueDetail, /converted from USD/);
     const card = await api('GET', '/api/cards/sv03.5-025', { token: B, expect: 200 });
-    const usd = card.data.prices.find((p) => p.source === 'tcgplayer' && p.variant === 'reverse').market;
-    assert.equal(data.item.value, usdToGbp(usd), 'TCGplayer USD price converted to GBP');
+    const usd = card.data.prices.find((p) => p.source === 'tcgplayer' && p.variant === 'reverse')?.market;
+    if (usd != null) {
+      // English copies are valued from TCGplayer when it has a price…
+      assert.equal(data.item.valueSource, 'tcgplayer', JSON.stringify(data.item));
+      assert.match(data.item.valueDetail, /converted from USD/);
+      assert.equal(data.item.value, usdToGbp(usd), 'TCGplayer USD price converted to GBP');
+    } else {
+      // …and from Cardmarket when TCGdex's live data has no TCGplayer price for the card (it sometimes hasn't)
+      assert.equal(data.item.valueSource, 'cardmarket', JSON.stringify(data.item));
+      assert.match(data.item.valueDetail, /converted from EUR/);
+    }
   });
 
   await check('another copy of the same card is counted with it; different details get their own entry', async () => {
@@ -265,7 +272,11 @@ try {
     assert.equal(data.card.setTotal, 102);
     assert.ok(data.card.variants.includes('holo'));
     assert.equal(data.card.dexId, 6);
-    assert.ok(data.prices.some((p) => p.source === 'tcgplayer' && p.variant === 'holo'), 'TCGplayer holo price');
+    // A TCGplayer holo price, or Cardmarket's when TCGdex's live data has no TCGplayer price for the card
+    assert.ok(
+      data.prices.some((p) => (p.source === 'tcgplayer' && p.variant === 'holo') || p.source === 'cardmarket'),
+      'a market price (TCGplayer holo, else Cardmarket)',
+    );
     assert.ok(data.history.length > 0, 'price history recorded');
     assert.equal(data.owned.length, 1);
     assert.ok(data.refreshedAt);
