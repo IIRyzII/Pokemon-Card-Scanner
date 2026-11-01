@@ -126,11 +126,12 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 
 ## 3. Market prices
 
-**Summary.** The prices the app values cards with. It has three parts:
+**Summary.** The prices the app values cards and sealed products with. It has three parts:
 
 - **Published with the catalogue:**
   - `prices.json`: one near-mint price for each card's standard printing, for set values.
   - `cardmarket/<set>.json`: Cardmarket prices per card and per special printing.
+  - `sealed.json`: Cardmarket's sealed products (booster boxes, Elite Trainer Boxes, packs, tins and more) with their prices.
 - **Kept by the API in its database:**
   - `card_prices`: the latest price points.
   - `price_history`: one point per card, source, printing and grade a day.
@@ -143,7 +144,7 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 | Source | What | How it is fetched |
 |---|---|---|
 | TCGplayer, via TCGdex | US market prices (USD) for English cards | From TCGdex's card data |
-| Cardmarket | European prices (EUR) for cards in any language | Cardmarket's public product list and daily price guide (`downloads.s3.cardmarket.com/productCatalog`) |
+| Cardmarket | European prices (EUR) for cards in any language, and for sealed products | Cardmarket's public product lists (single cards, and the other products) and daily price guide (`downloads.s3.cardmarket.com/productCatalog`) |
 | PriceCharting (optional) | Graded prices (PSA, BGS, CGC, SGC) | PriceCharting's API, with a paid token kept as a server secret |
 | European Central Bank | Daily euro reference rates | The ECB's daily XML file, fetched by the API at most twice a day |
 | The users | eBay sold prices they log | Entered in the app (stored with the collection, dataset 4) |
@@ -155,12 +156,17 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 - **Checking Cardmarket links.** TCGdex links some cards to the wrong Cardmarket product. For example, it links EX Deoxys's Gold Star Rayquaza to the plain Rayquaza from the same set. So the build checks every link against Cardmarket's product name and attacks and corrects the wrong ones. Where several products look alike, it uses the order Cardmarket numbers them in. Each build prints how many links it confirmed, corrected or could not find.
 - **Special printings.** A special printing (a cosmos holo, a stamped card) is priced from its own Cardmarket product. Until it has one, the app uses the plain printing's price and says so.
 - **Set values.** `prices.json` gives each card's standard printing in USD (TCGplayer) or else EUR (Cardmarket), in catalogue order.
+- **Sealed products.**
+  - The build takes Cardmarket's list of the Pokémon products that aren't single cards and names their kinds (Cardmarket's "displays" are booster boxes).
+  - Each product is linked to one of the catalogue's sets when most of the cards linked to its Cardmarket expansion are in that set. The rest (mostly Japanese and Chinese products, and sets not yet in the catalogue) have no set.
+  - A product is valued at Cardmarket's trend price, or else its 30-day average. Its lowest price is never used: one odd listing (a booster box offered at €100,000) makes it meaningless.
 - **Conversion.** The API converts prices into the collection's currency with the ECB's rates.
 
 **Schema.**
 
 - **`prices.json`:** `{ version, updated, usd: (number | null)[], eur: (number | null)[] }`, one entry per catalogue card. In the 28 October 2026 build, 17,441 cards have a USD price and 3,221 a EUR price.
 - **`cardmarket/<set>.json`:** `{ version, updated, cards }`. In `cards`, a card id (or `cardId|printing` for a special printing) maps to either 0 (no product) or `[product id, trend, low, 30-day average, holo trend, holo low, holo 30-day average]` in EUR. Cardmarket's "holo" prices are the reverse holo's.
+- **`sealed.json`:** `{ version, updated, products }`. Each product is `[Cardmarket product id, name, kind, catalogue set id or 0, date Cardmarket added it, trend, 30-day average]`, with prices in EUR (0 when there is none). Cardmarket's list of 1 November 2026 had 5,106 sealed products, 4,433 of them priced; about 40% were linked to a catalogue set.
 - **API tables:** defined in `api/migrations/0001_init.sql` and `0002_currency.sql`. Prices are stored with their currency and the time they were fetched.
 
 **Personal or sensitive data.** None.
@@ -178,6 +184,7 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 - Markets differ. TCGplayer reflects the US market for English cards; Cardmarket reflects European sales of a card in any language.
 - Prices for rarely traded cards are noisy, and averages lag sudden moves.
 - Set values assume one near-mint copy of each card's standard printing.
+- Sealed prices cover every language and condition Cardmarket sells a product in, and many sealed products sell rarely, so their prices are rougher than the cards'. Sealed products have no price history yet.
 - Catalogue prices are refreshed when the site rebuilds (TCGplayer's every 6 days, Cardmarket's daily). Prices for cards in the collection are refreshed by the API (see Maintenance).
 - The link check reduces, but cannot remove, the chance of a card being matched to the wrong product. A card it can't settle is left without a Cardmarket price rather than given a wrong one.
 - Graded prices need a paid PriceCharting subscription; without one, graded copies are valued only from sales the users log.
@@ -190,7 +197,7 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 
 ## 4. Accounts and collection database
 
-**Summary.** Everything users create: their accounts, the shared collection, binders, the want list, logged sales and an audit log. It is stored in a Cloudflare D1 (SQLite) database behind the API. The schema is defined by the migrations in `api/migrations/`.
+**Summary.** Everything users create: their accounts, the shared collection (cards and sealed products), binders, the want list, logged sales and an audit log. It is stored in a Cloudflare D1 (SQLite) database behind the API. The schema is defined by the migrations in `api/migrations/`.
 
 **Source and provenance.** Entered by the app's users. The live instance is run by Ryley Griffiths for a personal collection.
 
@@ -203,7 +210,7 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
   - The browser stretches the password with PBKDF2-SHA256 (600,000 iterations) before sending it. The server stores only a salted SHA-256 hash of the result, so the password itself never reaches the server.
   - The first account becomes the admin; later sign-ups are "Pending" until an admin approves them.
 - **Collection:**
-  - Collection items, binders, wants and logged sales record who created them.
+  - Collection items, sealed products, binders, wants and logged sales record who created them.
   - Every change is written to the audit log.
 - **Scans:** camera frames and photos are processed in the browser and are not stored or sent to the API.
 
@@ -217,6 +224,7 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 | `audit_log` | user id and email, action, item, details, time | Who changed what |
 | `collection_items` | the id of the user who added or removed it; purchase price and date, notes, grading cert number | The collection |
 | `sales`, `binders`, `wants` | the id of the user who created it | Sales log, binders, want list |
+| `sealed_items` | the id of the user who added it; purchase price and date, notes | Sealed products in the collection |
 
 **Personal or sensitive data and how it is protected.**
 

@@ -55,6 +55,11 @@ export function cardmarketSearchUrl(card: CardRef): string {
   return `https://www.cardmarket.com/en/Pokemon/Products/Search?searchString=${q(card.name)}`;
 }
 
+/** A sealed product (by its name) on Cardmarket, and its sealed copies sold on eBay, latest first. */
+export const sealedCardmarketUrl = (name: string) => `https://www.cardmarket.com/en/Pokemon/Products/Search?searchString=${q(name)}`;
+export const sealedEbaySoldUrl = (name: string, domain = 'www.ebay.com') =>
+  `https://${domain}/sch/i.html?_nkw=${q(`${name} sealed`)}&LH_Sold=1&LH_Complete=1&_sop=13`;
+
 /** Serebii's Cardex lists every card of one Pokémon by National Dex number. */
 export function serebiiCardexUrl(dexId: number): string {
   return `https://www.serebii.net/card/dex/${String(dexId).padStart(3, '0')}.shtml`;

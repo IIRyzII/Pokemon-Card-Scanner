@@ -1,6 +1,7 @@
 // Camera glue for the card finder: looks for the card in the live video (or a photo), and cuts a
 // straightened, full-resolution copy of it out of the picture for reading.
 
+import { straightenPadded, type Padded } from './condition.ts';
 import { CARD_ASPECT, detectCard, type Corners, type Detection, type Point } from './detect.ts';
 import { warpCard, type Rgba } from './warp.ts';
 
@@ -112,6 +113,30 @@ export function straightenCard(source: CanvasImageSource, width: number, height:
   const outW = Math.round(outH * CARD_ASPECT);
   const rgba = warpCard({ data: src.data, width: bw, height: bh }, local, outW, outH);
   return { rgba, canvas: toCanvas(rgba) };
+}
+
+/**
+ * A straightened copy of the card with a margin of what's round it, for measuring its borders (see
+ * condition.ts): at about the resolution it was seen, 700–1600 pixels tall.
+ */
+export function straightenForMeasuring(source: CanvasImageSource, width: number, height: number, corners: Corners): Padded {
+  const seen = (Math.hypot(corners[0].x - corners[3].x, corners[0].y - corners[3].y) + Math.hypot(corners[1].x - corners[2].x, corners[1].y - corners[2].y)) / 2;
+  const extra = 0.1 * seen; // more than the margin kept
+  const xs = corners.map((p) => p.x);
+  const ys = corners.map((p) => p.y);
+  const bx = Math.max(0, Math.floor(Math.min(...xs) - extra));
+  const by = Math.max(0, Math.floor(Math.min(...ys) - extra));
+  const bw = Math.max(1, Math.min(width, Math.ceil(Math.max(...xs) + extra)) - bx);
+  const bh = Math.max(1, Math.min(height, Math.ceil(Math.max(...ys) + extra)) - by);
+  const grab = document.createElement('canvas');
+  grab.width = bw;
+  grab.height = bh;
+  const gctx = grab.getContext('2d', { willReadFrequently: true })!;
+  gctx.drawImage(source, bx, by, bw, bh, 0, 0, bw, bh);
+  const src = gctx.getImageData(0, 0, bw, bh);
+  grab.width = grab.height = 0;
+  const local = corners.map((p) => ({ x: p.x - bx, y: p.y - by })) as Corners;
+  return straightenPadded({ data: src.data, width: bw, height: bh }, local, Math.min(1600, Math.max(700, seen)));
 }
 
 export function toCanvas(img: Rgba): HTMLCanvasElement {

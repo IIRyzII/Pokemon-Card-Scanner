@@ -1,5 +1,5 @@
 // Downloads the published card catalog (the files the web app reads: catalog.json, meta.json,
-// prints.bin and prices.json) into web/public/catalog, so the app can run locally without
+// prints.bin, prices.json and sealed.json) into web/public/catalog, so the app can run locally without
 // building the catalog from TCGdex, which takes a long time from scratch (see build-catalog.mjs).
 //
 // Usage: node scripts/download-catalog.mjs [--from URL] [--out DIR] [--if-missing]
@@ -39,8 +39,9 @@ async function main() {
   const hash = createHash('sha256').update(catalog).digest('hex').slice(0, 12);
   if (meta.hash && hash !== meta.hash) throw new Error('catalog.json does not match meta.json (the site may be mid-deploy): try again in a few minutes');
   const files = { 'meta.json': JSON.stringify(meta, null, 2), 'catalog.json': catalog };
-  // Optional parts: without them the scanner reads card text only, and sets show no values
-  for (const file of ['prints.bin', 'prices.json']) {
+  // Optional parts: without them the scanner reads card text only, sets show no values, and sealed
+  // products can't be added
+  for (const file of ['prints.bin', 'prices.json', 'sealed.json']) {
     try {
       files[file] = await get(file);
     } catch (err) {

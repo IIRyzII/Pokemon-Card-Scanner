@@ -49,7 +49,7 @@ This card follows the structure of Mitchell et al. (2019), "Model Cards for Mode
   - Page scans tick only clear results, and the user reviews and can untick any pocket before adding.
 - **Out of scope:**
   - Judging whether a card is genuine.
-  - Grading a card's condition.
+  - Grading a card. The separate grade check measures a card's centering and looks for white wear, to estimate the best grade it could get. It gives a guide, not a grade, and is described in [the grade-check evaluation](../eval/condition/README.md).
   - Non-English cards.
   - Any automated decision without a person's review.
   - Recognising anything other than catalogue cards.

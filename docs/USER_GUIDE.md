@@ -5,7 +5,9 @@ How to use the app: scanning, the collection, binders, the want list, prices and
 ## Contents
 
 - [Adding cards](#adding-cards)
+- [Grade check](#grade-check)
 - [The collection](#the-collection)
+- [Sealed products](#sealed-products)
 - [Binders](#binders)
 - [Want list](#want-list)
 - [Prices and currency](#prices-and-currency)
@@ -26,6 +28,27 @@ How to use the app: scanning, the collection, binders, the want list, prices and
 - **Scan a stack**: switch the scanner to **Stack of cards** and show your cards one after another. Each card found asks a quick yes (**✓ Add to list**), then goes in a list while the camera carries on with the next one. Then check the list (printing, condition, quantity, estimated value) and add every card at once.
 - **Confirm before adding**: pick the printing (normal, holo, reverse, 1st edition or a special printing such as a cosmos holo), the **language** it's printed in (English, French, German, Italian, Spanish or Portuguese), raw condition or graded slab (PSA, BGS, CGC, SGC, TAG, ACE), quantity and what you paid. Then review and confirm.
 
+## Grade check
+
+Before paying to grade a card, check the best grade it could get, and whether grading would pay.
+
+- Open it from the scanner (**Grade check** above the camera) or from a card's page.
+- **Take the photos.** Take the card out of its sleeve and lay it on a plain, dark surface. Fill the outline with it, holding the phone straight above it, away from glare. Do the front, then the back.
+- **Centering.**
+  - The app finds the card's edges and where each border ends, all along each side. It shows them as lines over the photo: white for the card's edges, pink for where each border ends.
+  - It gives left to right and top to bottom as ratios, such as 58/42, taken at the most off-centre point, as PSA measures them.
+  - It then says the best grade PSA's centering limits allow. For a 10, that is 55/45 or better on the front and 75/25 on the back. PSA allows 5% more on the front for grades of 7 and up, at the grader's discretion.
+- **If a line is in the wrong place** (on some designs the border fades into the frame), tap **Adjust the lines**. Pick a side and move each line in or out while looking at the magnified view.
+  - A dashed red line is one the app couldn't find: move it onto the edge of the border.
+  - If the borders across and down don't add up to about the same width, the app asks you to check the lines.
+- **White wear.** On the back, the app looks along the very edge of each side and round each corner for white specks, and circles them in red. Each corner is also shown magnified. This needs a dark surface and a sharp photo. It is a rough check, so look closely yourself too.
+- **What a photo can't judge.** Answer four questions: corners, edges, surface and creases. Each answer says which of PSA's grade descriptions it matches. The edges answer starts from what the photo of the back suggests.
+- **The estimate** is the best grade the card could get: the lowest of what its centering and your answers allow, with what holds it there. It is a guide, not a grade. PSA judges the whole card by eye.
+- **Is it worth grading?**
+  - Enter what grading costs you: the grader's fee plus postage and insurance both ways. It is remembered for next time.
+  - The table shows what the card would be worth at the estimated grade and the two grades below, from your logged sales or PriceCharting, and how much more than its raw value that is after the cost.
+- How the measurement was tested, and its limits, are in [the grade-check evaluation](../eval/condition/README.md).
+
 ## The collection
 
 - Every card shows its **image, name, set, number** and **price**. Totals for the whole collection are at the top.
@@ -34,6 +57,16 @@ How to use the app: scanning, the collection, binders, the want list, prices and
   - Sort by **Copies: most → least** to see the cards you have most of first, each with its total copies and value.
   - If older duplicate entries are still separate, the collection page offers to **Combine** them, and so does **Account → Duplicate entries**. The number of cards stays the same.
 - It works like an app on your phone: **Add to Home Screen** and it opens full screen, even offline.
+
+## Sealed products
+
+Booster boxes, Elite Trainer Boxes, booster packs, tins, box sets, theme decks, blisters and more.
+
+- Open the **Collection** tab and switch from **Cards** to **Sealed**.
+- **Add one:** tap **Add a sealed product** (or +), search by name or set (`151 elite trainer box`), and narrow it by kind if you like. The list is Cardmarket's, newest first. Pick the product, then set how many, what you paid for one, when, and any notes.
+- **Values** are Cardmarket's trend prices, converted to your currency. The total at the top compares what you paid with what those products are worth now. A product with no Cardmarket price yet shows a dash.
+- **Change or remove one:** tap it. Links to Cardmarket and to eBay sold listings help you check a price.
+- Sealed products need the API's latest version (with its new database table). Until it's updated, the Sealed view says so.
 
 ## Binders
 

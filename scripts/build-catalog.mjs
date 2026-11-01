@@ -19,6 +19,10 @@
 // packs, and which stamped promo-set cards are versions of a set's own (SVP 057 Chi-Yu, Paradox
 // Rift's Build & Battle promo): what a grand master set binder is made of (shared/printings.ts).
 //
+// And the sealed products (sealed.json): Cardmarket's list of the Pokémon products that aren't single
+// cards (booster boxes, Elite Trainer Boxes, packs, tins…) with its prices, each linked to our set
+// when the cards of its Cardmarket expansion are (shared/sealed.ts).
+//
 // Usage: node --experimental-strip-types scripts/build-catalog.mjs [--out web/public/catalog] [--if-missing] [--fallback-url https://you.github.io/repo/catalog] [--prices-max-age-days 6]
 //   --if-missing:   do nothing when a catalog already exists (used by `npm run dev`).
 //   --fallback-url: the published catalog: prints and recent prices are reused from it, and if
@@ -35,6 +39,7 @@ import { VARIANTS } from '../shared/grading.ts';
 import { cardPrintings, inferPrintings, isSpecialPrinting, parsePrinting, printingKey, setPromoPrintings, stampedPromoLinks } from '../shared/printings.ts';
 import { cardmarketIndex, cardmarketName, cardmarketPrices, cardmarketRows, entryOf, linkSet, pricesOf, productParts } from '../shared/cardmarket.ts';
 import { extractPrices, reportedSources, standardPrice } from '../shared/market.ts';
+import { expansionSets, sealedFile } from '../shared/sealed.ts';
 
 const API = 'https://api.tcgdex.net/v2/en';
 const GQL = 'https://api.tcgdex.net/v2/graphql';
@@ -539,12 +544,18 @@ async function buildPrices(catalog) {
 
 /**
  * Every card's Cardmarket product, checked (shared/cardmarket.ts), with Cardmarket's own prices
- * from its daily price guide. Without Cardmarket's files, the earlier build's are kept.
- * Returns { updated, cards: card id → [TCGdex's product, "attack|attack", entry] } or null.
+ * from its daily price guide, and the sealed products. Without Cardmarket's files, the earlier
+ * build's card prices are kept.
+ * Returns { updated, cards: card id → [TCGdex's product, "attack|attack", entry], sealed } or null.
  */
 async function buildCardmarket(catalog, links, earlierLinks) {
   let products;
   let guide;
+  // Sealed products are a separate list: without it, the cards' prices are still made.
+  const sealedList = getJSON(`${CARDMARKET}/productList/products_nonsingles_6.json`).catch((err) => {
+    console.warn(`Cardmarket's list of sealed products couldn't be fetched (${err.message})`);
+    return null;
+  });
   try {
     [products, guide] = await Promise.all([
       getJSON(`${CARDMARKET}/productList/products_singles_6.json`),
@@ -558,7 +569,7 @@ async function buildCardmarket(catalog, links, earlierLinks) {
     const cards = Object.fromEntries(earlierLinks.byId);
     // …with the printings fetched this time
     for (const [id, link] of links) if (cards[id] && link.printings) cards[id] = [cards[id][0], cards[id][1], cards[id][2], link.printings, cards[id][4] ?? 0];
-    return { updated: earlierLinks.updated, cards };
+    return { updated: earlierLinks.updated, cards, sealed: null };
   }
   const index = cardmarketIndex(products.products);
   const priceOf = new Map(guide.priceGuides.map((g) => [g.idProduct, g]));
@@ -594,7 +605,33 @@ async function buildCardmarket(catalog, links, earlierLinks) {
       `(${tally.guessed} of them among look-alike products), ${tally.none} cards without one; ${specialPrices} special printings priced`,
   );
   const made = Date.parse(String(guide.createdAt)); // when Cardmarket made it: "2026-10-22T02:45:11+0200"
-  return { updated: new Date(Number.isNaN(made) ? Date.now() : made).toISOString(), cards };
+  const updated = new Date(Number.isNaN(made) ? Date.now() : made).toISOString();
+  // Sealed products, each in the set its Cardmarket expansion's cards are linked to.
+  const nonsingles = await sealedList;
+  let sealed = null;
+  if (nonsingles?.products?.length) {
+    const linked = catalog.cards.flatMap((row) => {
+      const entry = cards[row[0]]?.[2];
+      const idExpansion = entry ? index.byId.get(entry[0])?.idExpansion : undefined;
+      return idExpansion ? [{ setId: catalog.sets[row[3]].id, idExpansion }] : [];
+    });
+    sealed = sealedFile(nonsingles.products, guide.priceGuides, expansionSets(linked), updated);
+    const inSets = sealed.products.filter((p) => p[3]).length;
+    const priced = sealed.products.filter((p) => p[5] || p[6]).length;
+    console.log(`Sealed products: ${sealed.products.length}, ${inSets} of them in our sets, ${priced} priced`);
+  }
+  return { updated, cards, sealed };
+}
+
+/** sealed.json; or, when Cardmarket's list couldn't be fetched, the published one again (if there is one). */
+async function writeSealed(sealed) {
+  if (!sealed && FALLBACK_URL) {
+    sealed = await getJSON(`${FALLBACK_URL.replace(/\/$/, '')}/sealed.json`).catch(() => null);
+    if (sealed?.products?.length) console.warn(`  kept the published sealed products (from ${String(sealed.updated).slice(0, 10)})`);
+  }
+  if (!sealed?.products?.length) return;
+  await writeFile(path.join(OUT_DIR, 'sealed.json'), JSON.stringify(sealed));
+  console.log(`Wrote ${sealed.products.length} sealed products`);
 }
 
 /**
@@ -732,6 +769,7 @@ async function main() {
   if (cardmarket) applyCardmarket(catalog, prices, cardmarket);
   await write(catalog, prints, prices);
   if (cardmarket) await writeCardmarket(catalog, cardmarket);
+  await writeSealed(cardmarket?.sealed ?? null);
 }
 
 const t0 = Date.now();

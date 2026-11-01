@@ -114,6 +114,32 @@ try {
     await api('PATCH', `/api/users/${me.data.user.id}`, { token: A, body: { role: 'editor' }, expect: 409 });
   });
 
+  await check('sealed products: editors add and change them, viewers only look', async () => {
+    const body = { productId: 271824, name: 'Base Set Booster Box', type: 'Booster box', purchasePrice: 120, purchaseCurrency: 'GBP', purchaseDate: '2001-05-01', notes: 'still in its shrink wrap' };
+    const { data } = await api('POST', '/api/sealed', { token: A, body, expect: 201 });
+    assert.deepEqual(
+      { ...data.item, id: undefined, createdAt: undefined, updatedAt: undefined },
+      { ...body, quantity: 1, id: undefined, createdAt: undefined, updatedAt: undefined },
+    );
+    await api('POST', '/api/sealed', { token: B, body, expect: 403 });
+    await api('POST', '/api/sealed', { token: A, body: { ...body, productId: 'one' }, expect: 400 });
+    await api('POST', '/api/sealed', { token: A, body: { ...body, type: 'Bucket' }, expect: 400 });
+    await api('POST', '/api/sealed', { token: A, body: { ...body, quantity: 0 }, expect: 400 });
+    const changed = await api('PATCH', `/api/sealed/${data.item.id}`, { token: A, body: { quantity: 2, notes: null }, expect: 200 });
+    assert.equal(changed.data.item.quantity, 2);
+    assert.equal(changed.data.item.notes, null);
+    assert.equal(changed.data.item.purchasePrice, 120, 'what wasn’t sent stays');
+    const seen = await api('GET', '/api/sealed', { token: B, expect: 200 });
+    assert.deepEqual(
+      seen.data.items.map((i) => [i.name, i.quantity]),
+      [['Base Set Booster Box', 2]],
+    );
+    await api('DELETE', `/api/sealed/${data.item.id}`, { token: B, expect: 403 });
+    const extra = await api('POST', '/api/sealed', { token: A, body: { productId: 1, name: 'Removed again' }, expect: 201 });
+    await api('DELETE', `/api/sealed/${extra.data.item.id}`, { token: A, expect: 200 });
+    await api('PATCH', `/api/sealed/${extra.data.item.id}`, { token: A, body: { quantity: 3 }, expect: 404 });
+  });
+
   await check('editor adds a PSA 9 Base Set Charizard (card data from our API)', async () => {
     await api('PATCH', `/api/users/${bobId}`, { token: A, body: { role: 'editor' }, expect: 200 });
     const { data } = await api('POST', '/api/collection', {
@@ -355,6 +381,10 @@ try {
     for (const a of ['register', 'add', 'merge', 'log-sale', 'remove', 'restore', 'purge', 'update']) assert.ok(actions.includes(a), a);
     const exp = await api('GET', '/api/admin/export', { token: A, expect: 200 });
     assert.equal(exp.data.collection.length, 1);
+    assert.deepEqual(
+      exp.data.sealed.map((s) => s.name),
+      ['Base Set Booster Box'],
+    );
     assert.deepEqual(
       exp.data.binders.map((b) => b.name),
       ['Shuckle binder'],

@@ -241,10 +241,10 @@ export function captureFrame(video: HTMLVideoElement, frame: HTMLElement): HTMLC
   return canvas;
 }
 
-/** Loads a photo into a canvas, no more than 2000px on its longer side. */
-export async function loadPhoto(file: Blob): Promise<HTMLCanvasElement> {
+/** Loads a photo into a canvas, no more than `longest` pixels on its longer side. */
+export async function loadPhoto(file: Blob, longest = 2000): Promise<HTMLCanvasElement> {
   const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+  const scale = Math.min(1, longest / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);

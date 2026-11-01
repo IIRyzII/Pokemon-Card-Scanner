@@ -35,17 +35,22 @@ export function homography(from: readonly Point[], to: readonly Point[]): Float6
   return h;
 }
 
-/** Copies the quadrilateral `corners` of `src` into an upright outW×outH image (bilinear sampling). */
-export function warpCard(src: Rgba, corners: Corners, outW: number, outH: number): Rgba {
+/**
+ * Copies the quadrilateral `corners` of `src` into an upright outW×outH image (bilinear sampling),
+ * with `pad` pixels of what's round it on every side.
+ */
+export function warpCard(src: Rgba, corners: Corners, outW: number, outH: number, pad = 0): Rgba {
   const h = homography(
     [
-      { x: 0, y: 0 },
-      { x: outW, y: 0 },
-      { x: outW, y: outH },
-      { x: 0, y: outH },
+      { x: pad, y: pad },
+      { x: outW + pad, y: pad },
+      { x: outW + pad, y: outH + pad },
+      { x: pad, y: outH + pad },
     ],
     corners,
   );
+  outW += 2 * pad;
+  outH += 2 * pad;
   const out = new Uint8ClampedArray(outW * outH * 4);
   const sw = src.width;
   const sh = src.height;

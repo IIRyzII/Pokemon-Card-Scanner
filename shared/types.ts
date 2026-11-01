@@ -169,6 +169,28 @@ export interface Want {
 export type WantInput = Pick<Want, 'cardId' | 'variant'> &
   Partial<Pick<Want, 'quantity' | 'priority' | 'maxPrice' | 'maxCurrency' | 'note'>>;
 
+/** A sealed product in the collection: one of Cardmarket's (the catalogue's sealed.json), with its details. */
+export interface SealedItem {
+  id: string;
+  /** Cardmarket's product id */
+  productId: number;
+  /** Its name and kind when it was added (kept in case it leaves the catalogue) */
+  name: string;
+  type: string | null;
+  quantity: number;
+  /** What was paid for one */
+  purchasePrice: number | null;
+  purchaseCurrency: string | null;
+  purchaseDate: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SealedInput = Pick<SealedItem, 'productId' | 'name' | 'type'> &
+  Partial<Pick<SealedItem, 'quantity' | 'purchasePrice' | 'purchaseCurrency' | 'purchaseDate' | 'notes'>>;
+export type SealedChanges = Partial<Pick<SealedItem, 'quantity' | 'purchasePrice' | 'purchaseCurrency' | 'purchaseDate' | 'notes'>>;
+
 /** POST /api/cards/prices: the market prices stored for each card (nothing is fetched first). */
 export interface CardPricesResponse {
   prices: Record<string, PriceRow[]>;

@@ -5,7 +5,7 @@
 //  - PageScanner (a binder's page): every pocket is checked against the card that goes there, and
 //    the ones found go into the collection.
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 import { allPrintingsOf, printingNote, type Pocket } from '../lib/binders.ts';
 import type { CatalogCard } from '../lib/catalog.ts';
 import { useCurrency } from '../lib/currency.tsx';
@@ -13,6 +13,7 @@ import type { PrintIndex } from '../lib/pictures.ts';
 import { href } from '../lib/router.ts';
 import { copiesIn, listCardOf, scanList, useScanList } from '../lib/scanList.ts';
 import { loadPrintIndex } from '../lib/useCatalog.ts';
+import { useBackCamera } from '../scan/camera.ts';
 import { captureFrame, loadPhoto } from '../scan/ocr.ts';
 import { checkPage, readPage, type PocketCheck, type PocketRead } from '../scan/pageScan.ts';
 import { CardImage } from './CardImage.tsx';
@@ -42,40 +43,9 @@ function PageCamera({ cols, rows, labels, onPhoto }: { cols: number; rows: numbe
   const video = useRef<HTMLVideoElement>(null);
   const guide = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const cameraError = useBackCamera(video) ?? photoError;
   const aspect = pageAspect(cols, rows);
-
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-    let gone = false;
-    (async () => {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraError(window.isSecureContext ? 'This browser has no camera access: use a photo instead.' : 'The camera only works on an https:// page.');
-        return;
-      }
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        });
-        if (gone) return stream.getTracks().forEach((t) => t.stop());
-        if (video.current) {
-          video.current.srcObject = stream;
-          await video.current.play().catch(() => undefined);
-        }
-      } catch (err) {
-        setCameraError(
-          (err as DOMException).name === 'NotAllowedError'
-            ? 'Camera permission was denied. Allow camera access in your browser settings, or use a photo instead.'
-            : 'No camera could be started. You can use a photo instead.',
-        );
-      }
-    })();
-    return () => {
-      gone = true;
-      stream?.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
 
   return (
     <>
@@ -88,7 +58,7 @@ function PageCamera({ cols, rows, labels, onPhoto }: { cols: number; rows: numbe
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = '';
-          if (file) loadPhoto(file).then(onPhoto, () => setCameraError("That photo couldn't be opened."));
+          if (file) loadPhoto(file).then(onPhoto, () => setPhotoError("That photo couldn't be opened."));
         }}
       />
       <p className="muted small center">Line the page's pockets up with the grid, then take the photo. Less glare is better: tilt the page away from lights.</p>

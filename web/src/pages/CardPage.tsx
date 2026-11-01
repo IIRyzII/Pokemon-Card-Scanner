@@ -5,6 +5,7 @@ import { hasRole, type CardDetailResponse } from '../../../shared/types.ts';
 import { AddToCollection } from '../components/AddToCollection.tsx';
 import { CardImage } from '../components/CardImage.tsx';
 import { gradeBadge, variantLabel } from '../components/CardTile.tsx';
+import { GradeCheck } from '../components/GradeCheck.tsx';
 import { IconBack, IconHeart, IconPlus } from '../components/Icons.tsx';
 import { PriceSection } from '../components/PriceSection.tsx';
 import { WantSheet } from '../components/WantSheet.tsx';
@@ -28,6 +29,7 @@ export function CardPage({ cardId }: { cardId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [wanting, setWanting] = useState(false);
+  const [grading, setGrading] = useState(false);
   const { byCard } = useWants();
   const wanted = byCard.get(cardId) ?? [];
   const canEdit = hasRole(user?.role, 'editor');
@@ -91,16 +93,21 @@ export function CardPage({ cardId }: { cardId: string }) {
             </p>
           )}
 
-          {canEdit && (
-            <div className="card-actions">
-              <button className="btn primary big" onClick={() => setAdding(true)} disabled={!card}>
-                <IconPlus /> Add to collection
-              </button>
-              <button className={`btn big want-btn${wanted.length ? ' on' : ''}`} onClick={() => setWanting(true)} disabled={!fromCatalog}>
-                <IconHeart filled={wanted.length > 0} /> {wanted.length ? 'On your want list' : 'Want it'}
-              </button>
-            </div>
-          )}
+          <div className="card-actions">
+            {canEdit && (
+              <>
+                <button className="btn primary big" onClick={() => setAdding(true)} disabled={!card}>
+                  <IconPlus /> Add to collection
+                </button>
+                <button className={`btn big want-btn${wanted.length ? ' on' : ''}`} onClick={() => setWanting(true)} disabled={!fromCatalog}>
+                  <IconHeart filled={wanted.length > 0} /> {wanted.length ? 'On your want list' : 'Want it'}
+                </button>
+              </>
+            )}
+            <button className="btn big" onClick={() => setGrading(true)} disabled={!fromCatalog}>
+              Grade check
+            </button>
+          </div>
           {wanted.length > 0 && (
             <p className="faint small">
               Wanted: {wanted.map((w) => `${printingNote(w.variant)} ×${w.quantity}`).join(', ')} · <a href="#/wants">want list</a>
@@ -143,6 +150,7 @@ export function CardPage({ cardId }: { cardId: string }) {
 
       {adding && card && <AddToCollection card={card} detail={detail} onClose={() => setAdding(false)} />}
       {wanting && <WantSheet cardId={cardId} onClose={() => setWanting(false)} />}
+      {grading && fromCatalog && <GradeCheck card={fromCatalog} onClose={() => setGrading(false)} />}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import binders from './routes/binders.ts';
 import cards from './routes/cards.ts';
 import collection from './routes/collection.ts';
 import sales from './routes/sales.ts';
+import sealed from './routes/sealed.ts';
 import users from './routes/users.ts';
 import wants from './routes/wants.ts';
 
@@ -40,6 +41,7 @@ app.route('/api/cards', cards);
 app.route('/api/sales', sales);
 app.route('/api/binders', binders);
 app.route('/api/wants', wants);
+app.route('/api/sealed', sealed);
 app.route('/api/admin', admin);
 
 app.notFound((c) => c.json({ error: 'Not found' }, 404));

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { cardNumberText } from '../../../shared/links.ts';
 import { CardImage } from '../components/CardImage.tsx';
 import { variantLabel } from '../components/CardTile.tsx';
+import { GradeCheck } from '../components/GradeCheck.tsx';
 import { IconCamera, IconImage } from '../components/Icons.tsx';
 import { defaultFields } from '../components/ItemForm.tsx';
 import { PageReader } from '../components/PageScanner.tsx';
@@ -301,6 +302,19 @@ export function ScanPanel() {
     if (mounted.current) void startCamera();
   }
 
+  /** The grade check, with its own camera too. */
+  const [grading, setGrading] = useState(false);
+  function openGrading() {
+    stopCamera();
+    setFound(null);
+    setPhase('starting');
+    setGrading(true);
+  }
+  function closeGrading() {
+    setGrading(false);
+    if (mounted.current) void startCamera();
+  }
+
   function scanAgain() {
     lastResults = null;
     markHistory(false);
@@ -343,6 +357,7 @@ export function ScanPanel() {
     <div className={`scan${stack ? ' stacking' : ''}`}>
       {catalogError && <p className="error">{catalogError}</p>}
       {paging && <PageReader onClose={closePage} />}
+      {grading && <GradeCheck onClose={closeGrading} />}
       <input
         ref={fileInput}
         type="file"
@@ -366,6 +381,9 @@ export function ScanPanel() {
             </button>
             <button type="button" aria-pressed={paging} onClick={openPage}>
               Binder page
+            </button>
+            <button type="button" aria-pressed={grading} onClick={openGrading}>
+              Grade check
             </button>
           </div>
           <div className={`viewfinder${outline ? ' has-card' : ''}`}>

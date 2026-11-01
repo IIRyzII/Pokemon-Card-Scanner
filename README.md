@@ -35,11 +35,13 @@ PokéVault is for individual collectors, or a small group sharing one collection
 
 - **On-device card recognition.** The phone finds the card in the camera picture, straightens it and matches its picture against about 21,000 cards. When reprints share artwork, it reads the printed number. Photos are never uploaded.
 - **Three ways to scan.** One card, a stack (one card after another), or a whole binder page in one photo.
+- **Grade check.** Photos of a card's front and back show how well it is centred against PSA's published limits, measured at its most off-centre point, and look for white wear along its edges. With the owner's answers about corners, surface and creases, it estimates the best grade the card could get, and whether grading would pay after the cost.
 - **Live valuations** from TCGplayer and Cardmarket, plus optional PriceCharting graded prices. They are converted with the European Central Bank's daily rates, and the app keeps its own price history.
 - **Binders.**
   - Your real binders, page by page, filled from the collection.
   - Built from a set as one of each card, a master set or a grand master set (every printing, then the promos).
   - One-tap + and − for each pocket.
+- **Sealed products**: booster boxes, Elite Trainer Boxes, packs, tins and more, from Cardmarket's product list, valued at Cardmarket's prices against what was paid.
 - **Want list** with a budget planner: it picks the best cards for a budget, keeping a buffer back.
 - **Accounts with roles** (Admin, Editor, Viewer, Pending), an audit log, a trash and backups.
 - **Installable on a phone** (progressive web app), working offline once loaded.
@@ -171,6 +173,7 @@ The repository is organised as:
 | `shared/` | Code used by the web app, the API and the build |
 | `scripts/` | The catalogue build and the catalogue download |
 | `eval/page-scan/` | The page-scan evaluation harness |
+| `eval/condition/` | The grade-check evaluation: border measurement on real card designs |
 | `docs/` | User guide, deployment guide, data card, model card and screenshots |
 
 ## Evaluation
@@ -187,6 +190,8 @@ Results on a held-out set (60 pages, 468 cards) that wasn't used for tuning:
 The rest were left for the user to decide ("not sure"), rather than guessed. The photos are simulated from the same pictures the scanner matches against, so real-world accuracy is expected to be lower. It has not yet been measured.
 
 The method, full results and how to reproduce them are in [`eval/page-scan`](eval/page-scan/README.md).
+
+The grade check's border measurement was run on 108 real card designs from 27 sets (1999 to 2026). Both axes were measured on 88 of them. In simulated photos of those designs, the result moved by a median of 0.3 points from the measurement on the flat picture, and by more than 3 points on 8% of readings, mostly on e-Reader-era cards and special silver-bordered designs. The app shows the lines it measured over the photo so they can be checked and moved. The true centering of these pictures isn't known, so this measures stability, not accuracy. Accuracy is checked on synthetic cards with known borders (within 1.5 points). Details are in [`eval/condition`](eval/condition/README.md).
 
 ## Security and privacy
 
@@ -216,6 +221,7 @@ The project was not built from a template or with a team. It uses the open-sourc
 
 - Only English cards: the catalogue doesn't include Japanese, Korean or Chinese cards.
 - Recognition has been evaluated only on simulated photos, and only for page scanning. The single-card scanner has no reproducible evaluation yet.
+- The grade check's measurement hasn't been tested against real cards with measured borders, and its white-wear check is a rough rule of thumb. It estimates the best grade a card could get, not its grade.
 - One shared collection per deployment, with no separate per-user collections.
 - Prices are approximate. TCGplayer and Cardmarket are different markets, and rarely traded cards have noisy prices.
 - The app depends on TCGdex's data and on free hosting tiers.
@@ -224,8 +230,8 @@ The project was not built from a template or with a team. It uses the open-sourc
 ## Next steps
 
 - A labelled set of real photos to measure recognition accuracy in practice, including on phones.
-- Grading tips, and an estimate of a card's condition from the camera.
-- Tracking sealed products.
+- Measuring the grade check against real cards with known centering and wear.
+- Price history for sealed products.
 - Japanese cards.
 - A scheduled clean-up of expired sessions and rate-limit records, and a privacy notice for the hosted instance.
 

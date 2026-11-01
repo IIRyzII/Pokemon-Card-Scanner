@@ -1963,6 +1963,19 @@ button.tile.as-button {
   max-width: 520px;
   margin: 0 auto 10px;
 }
+/* The four ways to scan don't fit in one row on a phone: two rows of two. */
+@media (max-width: 460px) {
+  .scan-mode {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .scan {
+    --scan-chrome: 432px;
+  }
+  .scan.stacking {
+    --scan-chrome: 496px;
+  }
+}
 .stack-bar {
   display: flex;
   align-items: center;
@@ -3059,4 +3072,329 @@ button.tile.as-button {
   .shelf.arranging .spine:not(.lifted) {
     animation: none;
   }
+}
+
+/* ---------- the grade check ---------- */
+
+.gc-viewfinder {
+  margin-top: 8px;
+}
+/* Smaller than the card scanner's outline: the card's edges need some of the table round them */
+.gc-frame {
+  height: 76%;
+}
+.gc-results {
+  display: grid;
+  gap: 16px;
+}
+.gc-card {
+  margin: 0;
+  font-weight: 600;
+}
+.gc-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.gc-field select {
+  max-width: 100%;
+}
+.gc-field input {
+  width: 8em;
+}
+.gc-shot {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.gc-shot h3 {
+  margin: 0;
+}
+.gc-shot-body {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  margin-top: 10px;
+}
+.gc-shot-info p {
+  margin: 6px 0;
+}
+.gc-photo {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #000;
+}
+.gc-photo img,
+.gc-photo svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.gc-photo line,
+.gc-zoom line,
+.gc-spot {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1.5px;
+}
+.gc-outer {
+  stroke: rgba(255, 255, 255, 0.95);
+}
+.gc-inner {
+  stroke: #ff3fb4;
+}
+.unsure .gc-inner {
+  stroke: #ff5050;
+  stroke-dasharray: 5 4;
+}
+.gc-spot {
+  fill: none;
+  stroke: #ff3b3b;
+}
+.gc-zoom {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+  border-radius: 8px;
+  background: #000;
+}
+.gc-axes {
+  margin: 0;
+  padding-left: 18px;
+}
+.gc-axes li {
+  margin: 3px 0;
+}
+.gc-adjust {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.gc-nudge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gc-nudge span {
+  min-width: 7em;
+}
+.gc-wear h4 {
+  margin: 14px 0 6px;
+}
+.gc-wear-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 2px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gc-wear-list li.marked {
+  color: var(--red);
+}
+.gc-corners {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 420px;
+  margin-top: 8px;
+}
+.gc-corners figure {
+  margin: 0;
+  text-align: center;
+}
+.gc-add-back {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+.gc-add-back p {
+  margin: 0;
+}
+.gc-questions {
+  display: grid;
+  gap: 10px;
+}
+.gc-questions h3,
+.gc-worth h3,
+.gc-estimate h3 {
+  margin: 0;
+}
+.gc-question {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.gc-question legend {
+  padding: 0 4px;
+  font-weight: 700;
+}
+.gc-question p {
+  margin: 0 0 6px;
+}
+.gc-question label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.gc-question label.on {
+  background: var(--surface-2);
+}
+.gc-question input[type='radio'] {
+  display: inline-block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 2px 0 0;
+  padding: 0;
+  accent-color: var(--blue);
+}
+.gc-estimate {
+  padding: 14px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.gc-estimate p {
+  margin: 6px 0 0;
+}
+.gc-grade {
+  margin-top: 4px;
+  font-size: 1.7rem;
+  font-weight: 800;
+}
+.gc-worth {
+  display: grid;
+  gap: 8px;
+}
+.gc-worth p {
+  margin: 0;
+}
+.gc-gain {
+  color: var(--green);
+  font-weight: 700;
+}
+.gc-loss {
+  color: var(--red);
+}
+.gc-tips summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+.gc-tips ul {
+  padding-left: 18px;
+}
+.gc-tips li {
+  margin: 4px 0;
+}
+@media (max-width: 520px) {
+  .gc-shot-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .gc-photo {
+    max-width: 260px;
+    margin: 0 auto;
+  }
+}
+
+/* ---------- sealed products ---------- */
+
+.collection-view {
+  display: flex;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto 10px;
+}
+button.fab {
+  border: none;
+  cursor: pointer;
+}
+button.fab:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.sealed-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sealed-search select {
+  width: auto;
+  flex: 0 1 190px;
+}
+.sealed-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 80px;
+  padding: 0;
+  list-style: none;
+}
+.sheet .sealed-list {
+  margin-bottom: 0;
+}
+.sealed-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sealed-row:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+}
+.sealed-info {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.sealed-name {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.sealed-name.big {
+  font-size: 1.15rem;
+}
+.sealed-qty {
+  color: var(--muted);
+  font-weight: 600;
+}
+.sealed-value {
+  display: grid;
+  justify-items: end;
+  white-space: nowrap;
+}
+.sealed-gain {
+  color: var(--green);
+  white-space: nowrap;
+}
+.sealed-loss {
+  color: var(--red);
+  white-space: nowrap;
+}
+.sealed-head {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+.sealed-price {
+  margin-top: 4px;
 }

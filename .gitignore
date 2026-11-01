@@ -14,6 +14,9 @@ web/public/catalog/
 # Page-scan evaluation: downloaded card pictures and generated page photos (made again from their seeds)
 eval/page-scan/.cache/
 eval/page-scan/out/
+# Grade-check evaluation: downloaded card pictures and results (made again from their seed)
+eval/condition/.cache/
+eval/condition/out/
 __pycache__/
 
 # The submission zip is made from the tag with `git archive`, so it never goes in the repository

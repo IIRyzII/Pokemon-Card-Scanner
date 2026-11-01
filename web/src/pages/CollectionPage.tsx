@@ -14,6 +14,7 @@ import { relativeTime } from '../lib/format.ts';
 import { href, useQueryParam } from '../lib/router.ts';
 import { useSession } from '../lib/session.tsx';
 import { useCatalog } from '../lib/useCatalog.ts';
+import { SealedSection } from './SealedSection.tsx';
 
 const SORTS = {
   recent: 'Recently added',
@@ -91,6 +92,7 @@ export function CollectionPage() {
   // Search and filter kept in the address, so coming back from a card shows the same cards.
   const [query, setQuery] = useQueryParam('q');
   const [shown, setShown] = useQueryParam('show', 'all');
+  const [view, setView] = useQueryParam('view', 'cards');
   const filter: Filter = shown in FILTERS ? (shown as Filter) : 'all';
   const setFilter = (f: Filter) => setShown(f);
   const [sort, setSortState] = useState<SortKey>(readSort);
@@ -168,150 +170,164 @@ export function CollectionPage() {
 
   return (
     <div className="page">
-      <section className="summary">
-        <div>
-          <div className="muted small">Collection value</div>
-          <div className="big-value">{s ? format(s.totalValue, s.currency) : '—'}</div>
-          {pricesUpdating ? (
-            <div className="prices-status faint small">
-              <IconRefresh className="spin" /> Updating prices…
-            </div>
-          ) : (
-            s?.pricesUpdatedAt && <div className="prices-status faint small">Prices updated {relativeTime(s.pricesUpdatedAt)}</div>
-          )}
-        </div>
-        <div className="stats">
-          <div>
-            <b>{s?.cards ?? 0}</b>
-            <span>cards</span>
-          </div>
-          <div>
-            <b>{s?.graded ?? 0}</b>
-            <span>graded</span>
-          </div>
-          <div>
-            <b>{s?.items ?? 0}</b>
-            <span>entries</span>
-          </div>
-        </div>
-        {s && s.unpriced > 0 && <div className="faint small">{s.unpriced} without a price yet</div>}
-      </section>
-
-      {canEdit && duplicates.into > 0 && (
-        <div className="note merge-note">
-          <span>
-            {duplicates.entries} entries are copies of the same card with the same details, from before copies were counted together.
-          </span>
-          <button className="btn small primary" onClick={duplicates.combine} disabled={duplicates.merging}>
-            {duplicates.merging ? 'Combining…' : `Combine into ${duplicates.into}`}
-          </button>
-        </div>
-      )}
-
-      <div className="toolbar">
-        <div className="search">
-          <IconSearch />
-          <input
-            type="search"
-            placeholder="Search your cards, sets, artists…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search collection"
-          />
-        </div>
-        <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort">
-          {Object.entries(SORTS).map(([k, label]) => (
-            <option key={k} value={k}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <div className="segmented small" role="group" aria-label="Show">
-          {(Object.keys(FILTERS) as Filter[]).map((f) => (
-            <button key={f} className={filter === f ? 'on' : ''} aria-pressed={filter === f} onClick={() => setFilter(f)}>
-              {FILTERS[f]}
-            </button>
-          ))}
-        </div>
+      <div className="segmented small collection-view" role="group" aria-label="Cards or sealed products">
+        <button className={view !== 'sealed' ? 'on' : ''} aria-pressed={view !== 'sealed'} onClick={() => setView('cards')}>
+          Cards
+        </button>
+        <button className={view === 'sealed' ? 'on' : ''} aria-pressed={view === 'sealed'} onClick={() => setView('sealed')}>
+          Sealed
+        </button>
       </div>
-
-      {dupes && dupes.cards > 0 && (
-        <p className="muted small dupes-summary">
-          {plural(dupes.cards, 'card')} you have more than one of:{' '}
-          <strong>{plural(dupes.copies, 'spare copy', 'spare copies')}</strong>, worth about {format(dupes.value, currency)}{' '}
-          (keeping your most valuable copy of each).
-        </p>
-      )}
-
-      {error && (
-        <p className="error">
-          {error}{' '}
-          <button className="link" onClick={reload}>
-            Try again
-          </button>
-        </p>
-      )}
-      {loading && !data && <div className="spinner" aria-label="Loading" />}
-
-      {data && data.items.length === 0 && (
-        <div className="empty">
-          <h2>No cards yet</h2>
-          {canEdit ? (
-            <>
-              <p className="muted">Scan a card with your camera or search by name to add your first one.</p>
-              <a className="btn primary" href={href('add', 'scan')}>
-                Scan a card
-              </a>{' '}
-              <a className="btn" href={href('add')}>
-                Search by name
-              </a>
-            </>
-          ) : (
-            <p className="muted">Cards added by editors will show up here.</p>
-          )}
-        </div>
-      )}
-      {data && data.items.length > 0 && items.length === 0 && (
-        <p className="muted center">
-          {filter === 'dupes' && !query.trim() ? 'No duplicates: you have one copy of every card.' : 'No cards match.'}
-        </p>
-      )}
-
-      {groups
-        ? groups.map((g) => (
-            <section key={g.key} className="group">
-              <h2 className="group-head">
-                {g.head}
-                <span className="group-count small">
-                  {g.count} · {format(g.value, currency)}
-                </span>
-              </h2>
-              <div className="grid">
-                {g.items.map((item) => (
-                  <ItemTile key={item.id} item={item} />
-                ))}
+      {view === 'sealed' ? (
+        <SealedSection canEdit={canEdit} />
+      ) : (
+        <>
+          <section className="summary">
+            <div>
+              <div className="muted small">Collection value</div>
+              <div className="big-value">{s ? format(s.totalValue, s.currency) : '—'}</div>
+              {pricesUpdating ? (
+                <div className="prices-status faint small">
+                  <IconRefresh className="spin" /> Updating prices…
+                </div>
+              ) : (
+                s?.pricesUpdatedAt && <div className="prices-status faint small">Prices updated {relativeTime(s.pricesUpdatedAt)}</div>
+              )}
+            </div>
+            <div className="stats">
+              <div>
+                <b>{s?.cards ?? 0}</b>
+                <span>cards</span>
               </div>
-            </section>
-          ))
-        : items.length > 0 && (
-            <div className="grid">
-              {items.map((item) => (
-                <ItemTile key={item.id} item={item} />
+              <div>
+                <b>{s?.graded ?? 0}</b>
+                <span>graded</span>
+              </div>
+              <div>
+                <b>{s?.items ?? 0}</b>
+                <span>entries</span>
+              </div>
+            </div>
+            {s && s.unpriced > 0 && <div className="faint small">{s.unpriced} without a price yet</div>}
+          </section>
+
+          {canEdit && duplicates.into > 0 && (
+            <div className="note merge-note">
+              <span>
+                {duplicates.entries} entries are copies of the same card with the same details, from before copies were counted together.
+              </span>
+              <button className="btn small primary" onClick={duplicates.combine} disabled={duplicates.merging}>
+                {duplicates.merging ? 'Combining…' : `Combine into ${duplicates.into}`}
+              </button>
+            </div>
+          )}
+
+          <div className="toolbar">
+            <div className="search">
+              <IconSearch />
+              <input
+                type="search"
+                placeholder="Search your cards, sets, artists…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search collection"
+              />
+            </div>
+            <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort">
+              {Object.entries(SORTS).map(([k, label]) => (
+                <option key={k} value={k}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <div className="segmented small" role="group" aria-label="Show">
+              {(Object.keys(FILTERS) as Filter[]).map((f) => (
+                <button key={f} className={filter === f ? 'on' : ''} aria-pressed={filter === f} onClick={() => setFilter(f)}>
+                  {FILTERS[f]}
+                </button>
               ))}
             </div>
+          </div>
+
+          {dupes && dupes.cards > 0 && (
+            <p className="muted small dupes-summary">
+              {plural(dupes.cards, 'card')} you have more than one of:{' '}
+              <strong>{plural(dupes.copies, 'spare copy', 'spare copies')}</strong>, worth about {format(dupes.value, currency)}{' '}
+              (keeping your most valuable copy of each).
+            </p>
           )}
 
-      {canEdit && data && (
-        <p className="center small">
-          <a href={href('trash')} className="faint">
-            Recently removed
-          </a>
-        </p>
-      )}
-      {canEdit && (
-        <a className="fab" href={href('add')} aria-label="Add a card">
-          <IconPlus />
-        </a>
+          {error && (
+            <p className="error">
+              {error}{' '}
+              <button className="link" onClick={reload}>
+                Try again
+              </button>
+            </p>
+          )}
+          {loading && !data && <div className="spinner" aria-label="Loading" />}
+
+          {data && data.items.length === 0 && (
+            <div className="empty">
+              <h2>No cards yet</h2>
+              {canEdit ? (
+                <>
+                  <p className="muted">Scan a card with your camera or search by name to add your first one.</p>
+                  <a className="btn primary" href={href('add', 'scan')}>
+                    Scan a card
+                  </a>{' '}
+                  <a className="btn" href={href('add')}>
+                    Search by name
+                  </a>
+                </>
+              ) : (
+                <p className="muted">Cards added by editors will show up here.</p>
+              )}
+            </div>
+          )}
+          {data && data.items.length > 0 && items.length === 0 && (
+            <p className="muted center">
+              {filter === 'dupes' && !query.trim() ? 'No duplicates: you have one copy of every card.' : 'No cards match.'}
+            </p>
+          )}
+
+          {groups
+            ? groups.map((g) => (
+                <section key={g.key} className="group">
+                  <h2 className="group-head">
+                    {g.head}
+                    <span className="group-count small">
+                      {g.count} · {format(g.value, currency)}
+                    </span>
+                  </h2>
+                  <div className="grid">
+                    {g.items.map((item) => (
+                      <ItemTile key={item.id} item={item} />
+                    ))}
+                  </div>
+                </section>
+              ))
+            : items.length > 0 && (
+                <div className="grid">
+                  {items.map((item) => (
+                    <ItemTile key={item.id} item={item} />
+                  ))}
+                </div>
+              )}
+
+          {canEdit && data && (
+            <p className="center small">
+              <a href={href('trash')} className="faint">
+                Recently removed
+              </a>
+            </p>
+          )}
+          {canEdit && (
+            <a className="fab" href={href('add')} aria-label="Add a card">
+              <IconPlus />
+            </a>
+          )}
+        </>
       )}
     </div>
   );

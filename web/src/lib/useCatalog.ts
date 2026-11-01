@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { PRINT_SPEC, PRINT_WORDS } from '../../../shared/cardprint.ts';
-import { buildCatalog, type Catalog, type CatalogJson } from './catalog.ts';
+import { SEALED_TYPES, sealedPrice, type SealedFile, type SealedType } from '../../../shared/sealed.ts';
+import { buildCatalog, normName, type Catalog, type CatalogJson, type CatalogSet } from './catalog.ts';
 import { PrintIndex } from './pictures.ts';
 
 interface Meta {
   hash?: string;
   prints?: { version: number; words: number; hash: string };
   prices?: { version: number; updated: string; hash: string };
+  sealed?: { version: number; updated: string; hash: string };
+  builtAt?: string;
 }
 
 /**
@@ -23,6 +26,7 @@ let metaPromise: Promise<Meta> | null = null;
 let promise: Promise<Catalog> | null = null;
 let printsPromise: Promise<PrintIndex | null> | null = null;
 let pricesPromise: Promise<MarketPrices | null> | null = null;
+let sealedPromise: Promise<SealedCatalogue | null> | null = null;
 
 function loadMeta(): Promise<Meta> {
   metaPromise ??= fetch('./catalog/meta.json', { cache: 'no-cache' })
@@ -79,6 +83,51 @@ export function loadMarketPrices(): Promise<MarketPrices | null> {
     return null;
   });
   return pricesPromise;
+}
+
+/** A sealed product from the catalogue (Cardmarket's). */
+export interface SealedProduct {
+  /** Cardmarket's product id */
+  id: number;
+  name: string;
+  type: SealedType;
+  /** Our set it belongs to, when its Cardmarket expansion is one */
+  set: CatalogSet | null;
+  /** When Cardmarket added it (YYYY-MM-DD) */
+  added: string;
+  /** Its value in EUR (Cardmarket's trend, else 30-day average), or null */
+  price: number | null;
+  /** Its name and set's, normalised, for searching */
+  key: string;
+}
+
+export interface SealedCatalogue {
+  /** When Cardmarket made the prices */
+  updated: string;
+  /** Newest first */
+  products: SealedProduct[];
+  byId: Map<number, SealedProduct>;
+}
+
+/** The sealed products (booster boxes, Elite Trainer Boxes, packs…), or null when the catalogue has none. */
+export function loadSealed(): Promise<SealedCatalogue | null> {
+  sealedPromise ??= (async () => {
+    const [meta, catalog] = await Promise.all([loadMeta(), loadCatalog()]);
+    const res = await fetch(`./catalog/sealed.json?v=${meta.sealed?.hash ?? meta.hash ?? ''}`);
+    if (!res.ok) return null;
+    const file = (await res.json()) as SealedFile;
+    if (file.version !== 1 || !Array.isArray(file.products)) return null;
+    const sets = new Map(catalog.sets.map((s) => [s.id, s]));
+    const products = file.products.map((row): SealedProduct => {
+      const set = row[3] ? (sets.get(row[3]) ?? null) : null;
+      return { id: row[0], name: row[1], type: SEALED_TYPES[row[2]] ?? 'Other', set, added: row[4], price: sealedPrice(row), key: normName(`${row[1]} ${set?.name ?? ''}`) };
+    });
+    return { updated: file.updated, products, byId: new Map(products.map((p) => [p.id, p])) };
+  })().catch(() => {
+    sealedPromise = null;
+    return null;
+  });
+  return sealedPromise;
 }
 
 export function useMarketPrices(): MarketPrices | null {

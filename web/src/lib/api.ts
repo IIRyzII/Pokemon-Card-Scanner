@@ -16,6 +16,9 @@ import type {
   NewSaleInput,
   PriceRefreshResponse,
   SaleRow,
+  SealedChanges,
+  SealedInput,
+  SealedItem,
   User,
   Want,
   WantInput,
@@ -144,6 +147,11 @@ export const api = {
   /** Puts a card on the want list, or changes it if that printing is already on it. */
   saveWant: (input: WantInput) => request<{ want: Want; created: boolean }>('POST', '/api/wants', input),
   deleteWant: (id: string) => request<{ ok: true }>('DELETE', `/api/wants/${enc(id)}`),
+  sealed: () => request<{ items: SealedItem[] }>('GET', '/api/sealed'),
+  addSealed: (input: SealedInput) => request<{ item: SealedItem }>('POST', '/api/sealed', input),
+  updateSealed: (id: string, changes: SealedChanges) => request<{ item: SealedItem }>('PATCH', `/api/sealed/${enc(id)}`, changes),
+  removeSealed: (id: string) => request<{ ok: true }>('DELETE', `/api/sealed/${enc(id)}`),
+
   /** The prices stored for many cards (nothing fetched first). */
   cardPrices: (cardIds: string[]) => request<CardPricesResponse>('POST', '/api/cards/prices', { cardIds }),
 
