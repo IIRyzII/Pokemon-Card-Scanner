@@ -11,14 +11,17 @@ import type {
   CollectionItem,
   CollectionResponse,
   ItemFields,
+  ListingInput,
   NewItemInput,
   MergeResponse,
   NewSaleInput,
   PriceRefreshResponse,
+  SaleInput,
   SaleRow,
   SealedChanges,
   SealedInput,
   SealedItem,
+  SoldItem,
   User,
   Want,
   WantInput,
@@ -147,6 +150,15 @@ export const api = {
   /** Puts a card on the want list, or changes it if that printing is already on it. */
   saveWant: (input: WantInput) => request<{ want: Want; created: boolean }>('POST', '/api/wants', input),
   deleteWant: (id: string) => request<{ ok: true }>('DELETE', `/api/wants/${enc(id)}`),
+  /** Puts copies of an entry up for sale, or changes how they're listed */
+  listItem: (id: string, input: ListingInput) => request<{ item: CollectionItem }>('PUT', `/api/collection/${enc(id)}/listing`, input),
+  unlistItem: (id: string) => request<{ item: CollectionItem }>('DELETE', `/api/collection/${enc(id)}/listing`),
+  /** Sells copies of an entry: `item` is null when they were its last */
+  sellItem: (id: string, input: SaleInput) => request<{ sold: SoldItem; item: CollectionItem | null }>('POST', `/api/collection/${enc(id)}/sell`, input),
+  soldItems: () => request<{ sold: SoldItem[] }>('GET', '/api/sold'),
+  /** Undoes a sale; `restored`: its copies went back to the collection */
+  undoSale: (id: string) => request<{ ok: true; restored: boolean; item: CollectionItem | null }>('DELETE', `/api/sold/${enc(id)}`),
+
   sealed: () => request<{ items: SealedItem[] }>('GET', '/api/sealed'),
   addSealed: (input: SealedInput) => request<{ item: SealedItem }>('POST', '/api/sealed', input),
   updateSealed: (id: string, changes: SealedChanges) => request<{ item: SealedItem }>('PATCH', `/api/sealed/${enc(id)}`, changes),

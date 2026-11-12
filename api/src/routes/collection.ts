@@ -15,8 +15,8 @@ import {
   type PriceRefreshResponse,
 } from '../../../shared/types.ts';
 import { authenticate, requireRole } from '../auth.ts';
-import { ITEM_SELECT, auditStmt, getItem, toItem } from '../db.ts';
-import { HttpError, nowIso, type AppEnv, type Env } from '../env.ts';
+import { ITEM_SELECT, auditStmt, getItem, toItem, toSold } from '../db.ts';
+import { HttpError, nowIso, todayIso, type AppEnv, type Env } from '../env.ts';
 import { getRates, homeCurrency } from '../fx.ts';
 import {
   ON_OPEN_TTL_MS,
@@ -27,7 +27,7 @@ import {
   refreshPriceCharting,
   refreshStalePrices,
 } from '../prices.ts';
-import { cardId as parseCardId, isoDate, number, oneOf, printing, readJson, text } from '../validate.ts';
+import { cardId as parseCardId, httpUrl, isoDate, latestToday, number, oneOf, printing, readJson, text } from '../validate.ts';
 
 /** TCGdex's printing flags only have the plain printings: a special one (a cosmos holo) is built on one the card comes in. */
 const comesIn = (card: CardInfo, variant: string) => card.variants.includes(basePrinting(variant));
@@ -74,7 +74,11 @@ collection.get('/', async (c) => {
   const trash = c.req.query('deleted') === '1';
   if (trash && !hasRole(c.get('user').role, 'editor')) throw new HttpError(403, 'Only editors can see removed cards');
   const { results } = await c.env.DB.prepare(
-    `${ITEM_SELECT} WHERE ci.deleted_at IS ${trash ? 'NOT NULL ORDER BY ci.deleted_at DESC' : 'NULL ORDER BY ci.created_at DESC'}`,
+    trash
+      ? // (Not entries whose last copies were sold: they're in the sales history, and come back if the sale is undone.)
+        `${ITEM_SELECT} WHERE ci.deleted_at IS NOT NULL AND ci.id NOT IN (SELECT item_id FROM sold_items WHERE emptied = 1 AND item_id IS NOT NULL)
+          ORDER BY ci.deleted_at DESC`
+      : `${ITEM_SELECT} WHERE ci.deleted_at IS NULL ORDER BY ci.created_at DESC`,
   ).all();
   const items = results.map(toItem);
   const currency = homeCurrency(c.env);
@@ -122,21 +126,40 @@ collection.post('/merge-duplicates', requireRole('editor'), async (c) => {
     const user = c.get('user');
     const now = nowIso();
     await c.env.DB.batch(
-      plans.flatMap(({ keep, absorb, quantity }) => [
-        c.env.DB.prepare('UPDATE collection_items SET quantity = ?, updated_at = ? WHERE id = ?').bind(quantity, now, keep.id),
-        // (50 at a time: D1 takes up to 100 values per statement)
-        ...Array.from({ length: Math.ceil(absorb.length / 50) }, (_, i) => absorb.slice(i * 50, i * 50 + 50)).map((ids) =>
-          c.env.DB.prepare(`DELETE FROM collection_items WHERE id IN (${ids.map(() => '?').join(', ')})`).bind(
-            ...ids.map((a) => a.id),
+      plans.flatMap(({ keep, absorb, quantity }) => {
+        // Copies for sale stay for sale, at the first asking price there is.
+        const all = [keep, ...absorb];
+        const forSale = Math.min(quantity, all.reduce((n, e) => n + e.forSale, 0));
+        const listing = all.find((e) => e.forSale > 0) ?? keep;
+        return [
+          c.env.DB.prepare(
+            `UPDATE collection_items SET quantity = ?, for_sale = ?, asking_price = ?, asking_currency = ?, sale_platform = ?,
+               listing_url = ?, listed_at = ?, updated_at = ? WHERE id = ?`,
+          ).bind(
+            quantity,
+            forSale,
+            forSale ? listing.askingPrice : null,
+            forSale ? listing.askingCurrency : null,
+            forSale ? listing.salePlatform : null,
+            forSale ? listing.listingUrl : null,
+            forSale ? listing.listedAt : null,
+            now,
+            keep.id,
           ),
-        ),
-        auditStmt(c.env, user, 'merge', 'item', keep.id, {
-          card: `${keep.name} · ${keep.setName} #${keep.number}`,
-          entries: absorb.length + 1,
-          quantity,
-          combined: absorb.map((a) => a.id),
-        }),
-      ]),
+          // (50 at a time: D1 takes up to 100 values per statement)
+          ...Array.from({ length: Math.ceil(absorb.length / 50) }, (_, i) => absorb.slice(i * 50, i * 50 + 50)).map((ids) =>
+            c.env.DB.prepare(`DELETE FROM collection_items WHERE id IN (${ids.map(() => '?').join(', ')})`).bind(
+              ...ids.map((a) => a.id),
+            ),
+          ),
+          auditStmt(c.env, user, 'merge', 'item', keep.id, {
+            card: `${keep.name} · ${keep.setName} #${keep.number}`,
+            entries: absorb.length + 1,
+            quantity,
+            combined: absorb.map((a) => a.id),
+          }),
+        ];
+      }),
     );
   }
   return c.json<MergeResponse>({
@@ -238,7 +261,8 @@ collection.patch('/:id', requireRole('editor'), async (c) => {
   await c.env.DB.batch([
     c.env.DB.prepare(
       `UPDATE collection_items SET variant = ?, language = ?, grader = ?, grade = ?, grade_label = ?, condition = ?, quantity = ?,
-         purchase_price = ?, purchase_currency = ?, purchase_date = ?, cert_number = ?, notes = ?, updated_at = ?
+         for_sale = MIN(for_sale, ?), purchase_price = ?, purchase_currency = ?, purchase_date = ?, cert_number = ?, notes = ?,
+         updated_at = ?
        WHERE id = ?`,
     ).bind(
       fields.variant,
@@ -247,6 +271,7 @@ collection.patch('/:id', requireRole('editor'), async (c) => {
       fields.grade,
       fields.gradeLabel,
       fields.condition,
+      fields.quantity,
       fields.quantity,
       fields.purchasePrice,
       fields.purchaseCurrency,
@@ -290,6 +315,151 @@ collection.post('/:id/restore', requireRole('editor'), async (c) => {
     auditStmt(c.env, c.get('user'), 'restore', 'item', item.id, { card: `${item.name} · ${item.setName}` }),
   ]);
   return c.json({ item: await getItem(c.env, item.id) });
+});
+
+const cardText = (item: { name: string; setName: string; number: string }) => `${item.name} · ${item.setName} #${item.number}`;
+
+/** Puts copies of an entry up for sale (how many, the asking price for one, where), or changes how they're listed. */
+collection.put('/:id/listing', requireRole('editor'), async (c) => {
+  const item = await loadItem(c.env, c.req.param('id'));
+  if (item.deletedAt) throw new HttpError(409, 'Restore this card before selling it');
+  const body = await readJson(c.req.raw);
+  const forSale = number(body.forSale ?? 1, 'Copies for sale', { min: 1, max: item.quantity, integer: true })!;
+  const askingPrice = number(body.askingPrice, 'Asking price', { optional: true, min: 0, max: 10_000_000 });
+  const askingCurrency = askingPrice === null ? null : oneOf(body.askingCurrency ?? homeCurrency(c.env), CURRENCIES, 'Currency');
+  const salePlatform = text(body.salePlatform, 'Selling on', { optional: true, max: 40 });
+  const listingUrl = httpUrl(body.listingUrl, 'Listing link');
+  const now = nowIso();
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE collection_items SET for_sale = ?, asking_price = ?, asking_currency = ?, sale_platform = ?, listing_url = ?, listed_at = ?,
+         updated_at = ? WHERE id = ?`,
+    ).bind(forSale, askingPrice, askingCurrency, salePlatform, listingUrl, item.forSale ? (item.listedAt ?? now) : now, now, item.id),
+    auditStmt(c.env, c.get('user'), item.forSale ? 'edit-listing' : 'list', 'item', item.id, {
+      card: cardText(item),
+      forSale,
+      askingPrice,
+      askingCurrency,
+      salePlatform,
+    }),
+  ]);
+  return c.json({ item: await getItem(c.env, item.id) });
+});
+
+/** Takes an entry's copies off sale (not sold). */
+collection.delete('/:id/listing', requireRole('editor'), async (c) => {
+  const item = await loadItem(c.env, c.req.param('id'));
+  if (!item.forSale) return c.json({ item });
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE collection_items SET for_sale = 0, asking_price = NULL, asking_currency = NULL, sale_platform = NULL, listing_url = NULL,
+         listed_at = NULL, updated_at = ? WHERE id = ?`,
+    ).bind(nowIso(), item.id),
+    auditStmt(c.env, c.get('user'), 'unlist', 'item', item.id, { card: cardText(item) }),
+  ]);
+  return c.json({ item: await getItem(c.env, item.id) });
+});
+
+/**
+ * Sells copies of an entry: the sale goes in the sales history (with the card and the copy's
+ * details, for its profit), the copies leave the collection (the entry with them, if they were its
+ * last), and unless asked not to, the sale is logged for the card's value.
+ */
+collection.post('/:id/sell', requireRole('editor'), async (c) => {
+  const item = await loadItem(c.env, c.req.param('id'));
+  if (item.deletedAt) throw new HttpError(409, 'Restore this card before selling it');
+  const body = await readJson(c.req.raw);
+  const quantity = number(body.quantity ?? 1, 'Copies sold', { min: 1, max: item.quantity, integer: true })!;
+  const price = Math.round(number(body.price, 'Price', { min: 0, max: 10_000_000 })! * 100) / 100;
+  const currency = oneOf(body.currency ?? homeCurrency(c.env), CURRENCIES, 'Currency')!;
+  const fees = number(body.fees, 'Fees', { optional: true, min: 0, max: 10_000_000 });
+  const postage = number(body.postage, 'Postage', { optional: true, min: 0, max: 10_000_000 });
+  const platform = text(body.platform, 'Sold on', { optional: true, max: 40 });
+  const soldOn = isoDate(body.soldOn ?? todayIso(), 'Sold date')!;
+  if (soldOn > latestToday()) throw new HttpError(400, "The sold date can't be in the future");
+  const note = text(body.note, 'Note', { optional: true, max: 300 });
+  const logSale = body.logSale !== false;
+  const emptied = quantity === item.quantity;
+  const user = c.get('user');
+  const id = crypto.randomUUID();
+  const saleId = logSale ? crypto.randomUUID() : null;
+  const now = nowIso();
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO sold_items (id, item_id, card_id, name, set_name, number, set_total, image, variant, language, grader, grade,
+         grade_label, condition, quantity, from_sale, price, currency, fees, postage, purchase_price, purchase_currency, platform, sold_on,
+         note, sale_id, emptied, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id,
+      item.id,
+      item.cardId,
+      item.name,
+      item.setName,
+      item.number,
+      item.setTotal,
+      item.image,
+      item.variant,
+      item.language,
+      item.grader,
+      item.grade,
+      item.gradeLabel,
+      item.condition,
+      quantity,
+      // (Copies for sale are the ones sold first.)
+      Math.min(quantity, item.forSale),
+      price,
+      currency,
+      fees,
+      postage,
+      item.purchasePrice,
+      item.purchasePrice === null ? null : item.purchaseCurrency,
+      platform,
+      soldOn,
+      note,
+      saleId,
+      emptied ? 1 : 0,
+      user.id,
+      now,
+    ),
+    ...(saleId
+      ? [
+          c.env.DB.prepare(
+            `INSERT INTO sales (id, card_id, grader, grade, grade_label, price, currency, sold_on, source, url, note, created_by, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).bind(
+            saleId,
+            item.cardId,
+            item.grader,
+            item.grade,
+            item.gradeLabel,
+            price,
+            currency,
+            soldOn,
+            platform ?? 'Sold',
+            item.listingUrl,
+            'Sold from the collection',
+            user.id,
+            now,
+          ),
+        ]
+      : []),
+    emptied
+      ? c.env.DB.prepare('UPDATE collection_items SET deleted_at = ?, deleted_by = ?, for_sale = 0, updated_at = ? WHERE id = ?').bind(
+          now,
+          user.id,
+          now,
+          item.id,
+        )
+      : // (The copies sold come off sale first.)
+        c.env.DB.prepare(
+          'UPDATE collection_items SET quantity = quantity - ?, for_sale = MAX(0, MIN(for_sale - ?, quantity - ?)), updated_at = ? WHERE id = ?',
+        ).bind(quantity, quantity, quantity, now, item.id),
+    auditStmt(c.env, user, 'sell', 'item', item.id, { card: cardText(item), quantity, price, currency, platform, soldOn }),
+  ]);
+  if (saleId) await recomputeValues(c.env, item.cardId);
+  const sold = await c.env.DB.prepare('SELECT * FROM sold_items WHERE id = ?').bind(id).first();
+  return c.json({ sold: toSold(sold!), item: emptied ? null : await getItem(c.env, item.id) }, 201);
 });
 
 /** Permanently delete a card that is already in the trash. */

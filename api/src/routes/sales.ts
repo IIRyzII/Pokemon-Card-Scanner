@@ -8,7 +8,7 @@ import { auditStmt, toSale } from '../db.ts';
 import { HttpError, nowIso, todayIso, type AppEnv } from '../env.ts';
 import { homeCurrency } from '../fx.ts';
 import { recomputeValues } from '../prices.ts';
-import { cardId as parseCardId, httpUrl, isoDate, number, oneOf, readJson, text } from '../validate.ts';
+import { cardId as parseCardId, httpUrl, isoDate, latestToday, number, oneOf, readJson, text } from '../validate.ts';
 
 const sales = new Hono<AppEnv>();
 sales.use('*', authenticate, requireRole('viewer'));
@@ -35,10 +35,7 @@ sales.post('/', requireRole('editor'), async (c) => {
   const price = number(body.price, 'Price', { min: 0, max: 10_000_000 })!;
   const currency = oneOf(body.currency ?? homeCurrency(c.env), CURRENCIES, 'Currency')!;
   const soldOn = isoDate(body.soldOn ?? todayIso(), 'Sold date')!;
-  // The app sends the user's local date, which can already be tomorrow in UTC (in the UK just after
-  // midnight in summer, in Australia for half the day): allow any date that's today somewhere.
-  const latestToday = new Date(Date.now() + 14 * 3_600_000).toISOString().slice(0, 10);
-  if (soldOn > latestToday) throw new HttpError(400, "The sold date can't be in the future");
+  if (soldOn > latestToday()) throw new HttpError(400, "The sold date can't be in the future");
   const source = text(body.source, 'Source', { optional: true, max: 40 }) ?? 'eBay';
   const url = httpUrl(body.url, 'Listing link');
   const note = text(body.note, 'Note', { optional: true, max: 300 });

@@ -42,6 +42,7 @@ PokéVault is for individual collectors, or a small group sharing one collection
   - Built from a set as one of each card, a master set or a grand master set (every printing, then the promos).
   - One-tap + and − for each pocket.
 - **Sealed products**: booster boxes, Elite Trainer Boxes, packs, tins and more, from Cardmarket's product list, valued at Cardmarket's prices against what was paid.
+- **Selling**: put copies up for sale with a ready-made listing title and description, record sales with their fees and postage, and see the profit by month. Sold copies leave the collection, and each sale counts towards the card's value.
 - **Want list** with a budget planner: it picks the best cards for a budget, keeping a buffer back.
 - **Accounts with roles** (Admin, Editor, Viewer, Pending), an audit log, a trash and backups.
 - **Installable on a phone** (progressive web app), working offline once loaded.

@@ -197,7 +197,7 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 
 ## 4. Accounts and collection database
 
-**Summary.** Everything users create: their accounts, the shared collection (cards and sealed products), binders, the want list, logged sales and an audit log. It is stored in a Cloudflare D1 (SQLite) database behind the API. The schema is defined by the migrations in `api/migrations/`.
+**Summary.** Everything users create: their accounts, the shared collection (cards and sealed products), the cards sold from it, binders, the want list, logged sales and an audit log. It is stored in a Cloudflare D1 (SQLite) database behind the API. The schema is defined by the migrations in `api/migrations/`.
 
 **Source and provenance.** Entered by the app's users. The live instance is run by Ryley Griffiths for a personal collection.
 
@@ -210,7 +210,8 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
   - The browser stretches the password with PBKDF2-SHA256 (600,000 iterations) before sending it. The server stores only a salted SHA-256 hash of the result, so the password itself never reaches the server.
   - The first account becomes the admin; later sign-ups are "Pending" until an admin approves them.
 - **Collection:**
-  - Collection items, sealed products, binders, wants and logged sales record who created them.
+  - Collection items, sealed products, sales, binders, wants and logged sales record who created them.
+  - A sale keeps the card's details and what the copies cost, so its profit stays in the history after the copies leave the collection.
   - Every change is written to the audit log.
 - **Scans:** camera frames and photos are processed in the browser and are not stored or sent to the API.
 
@@ -225,6 +226,7 @@ See the [model card](MODEL_CARD.md) for how recognition uses it.
 | `collection_items` | the id of the user who added or removed it; purchase price and date, notes, grading cert number | The collection |
 | `sales`, `binders`, `wants` | the id of the user who created it | Sales log, binders, want list |
 | `sealed_items` | the id of the user who added it; purchase price and date, notes | Sealed products in the collection |
+| `sold_items` | the id of the user who recorded it; what each copy sold for and cost, fees, postage, where and when it sold, notes | Sales history |
 
 **Personal or sensitive data and how it is protected.**
 

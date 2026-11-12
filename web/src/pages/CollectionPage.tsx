@@ -15,6 +15,7 @@ import { href, useQueryParam } from '../lib/router.ts';
 import { useSession } from '../lib/session.tsx';
 import { useCatalog } from '../lib/useCatalog.ts';
 import { SealedSection } from './SealedSection.tsx';
+import { SellingSection } from './SellingSection.tsx';
 
 const SORTS = {
   recent: 'Recently added',
@@ -170,16 +171,20 @@ export function CollectionPage() {
 
   return (
     <div className="page">
-      <div className="segmented small collection-view" role="group" aria-label="Cards or sealed products">
-        <button className={view !== 'sealed' ? 'on' : ''} aria-pressed={view !== 'sealed'} onClick={() => setView('cards')}>
-          Cards
-        </button>
-        <button className={view === 'sealed' ? 'on' : ''} aria-pressed={view === 'sealed'} onClick={() => setView('sealed')}>
-          Sealed
-        </button>
+      <div className="segmented small collection-view" role="group" aria-label="Cards, sealed products or selling">
+        {(['cards', 'sealed', 'selling'] as const).map((v) => {
+          const on = v === 'cards' ? view !== 'sealed' && view !== 'selling' : view === v;
+          return (
+            <button key={v} className={on ? 'on' : ''} aria-pressed={on} onClick={() => setView(v)}>
+              {v === 'cards' ? 'Cards' : v === 'sealed' ? 'Sealed' : 'Selling'}
+            </button>
+          );
+        })}
       </div>
       {view === 'sealed' ? (
         <SealedSection canEdit={canEdit} />
+      ) : view === 'selling' ? (
+        <SellingSection canEdit={canEdit} />
       ) : (
         <>
           <section className="summary">

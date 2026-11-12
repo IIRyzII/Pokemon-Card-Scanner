@@ -9,6 +9,7 @@ import { useFeedback } from '../components/feedback.tsx';
 import { IconBack, IconEdit, IconExternal, IconTrash } from '../components/Icons.tsx';
 import { ItemForm } from '../components/ItemForm.tsx';
 import { PriceSection } from '../components/PriceSection.tsx';
+import { ListingSheet, SellSheet } from '../components/SellSheets.tsx';
 import { Sheet } from '../components/Sheet.tsx';
 import { api } from '../lib/api.ts';
 import { allPrintingsOf } from '../lib/binders.ts';
@@ -26,6 +27,8 @@ export function ItemPage({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<ItemFields | null>(null);
   const [saving, setSaving] = useState(false);
+  const [listing, setListing] = useState(false);
+  const [selling, setSelling] = useState(false);
   const { user } = useSession();
   const { catalog } = useCatalog();
   const { reload } = useCollection();
@@ -140,6 +143,25 @@ export function ItemPage({ id }: { id: string }) {
             )}
           </div>
 
+          {item.forSale > 0 && (
+            <div className="for-sale-box">
+              <b>For sale</b>
+              <span className="small">
+                {item.forSale === item.quantity ? (item.quantity > 1 ? `all ${item.quantity}` : 'this copy') : `${item.forSale} of ${item.quantity}`}
+                {item.askingPrice !== null && ` · asking ${format(item.askingPrice, item.askingCurrency ?? currency)} each`}
+                {item.salePlatform && ` · ${item.salePlatform}`}
+                {item.listingUrl && (
+                  <>
+                    {' · '}
+                    <a href={item.listingUrl} target="_blank" rel="noreferrer">
+                      listing <IconExternal />
+                    </a>
+                  </>
+                )}
+              </span>
+            </div>
+          )}
+
           <dl className="facts">
             <div>
               <dt>Language</dt>
@@ -188,6 +210,12 @@ export function ItemPage({ id }: { id: string }) {
 
           {canEdit && (
             <div className="actions">
+              <button className={`btn${item.forSale ? ' on' : ''}`} onClick={() => setListing(true)}>
+                {item.forSale ? 'Selling…' : 'For sale'}
+              </button>
+              <button className="btn" onClick={() => setSelling(true)}>
+                Sold
+              </button>
               <button
                 className="btn"
                 onClick={() =>
@@ -233,6 +261,31 @@ export function ItemPage({ id }: { id: string }) {
         <div className="spinner" aria-label="Loading prices" />
       )}
 
+      {listing && (
+        <ListingSheet
+          item={item}
+          onClose={() => setListing(false)}
+          onSaved={(saved) => {
+            setItem(saved);
+            setListing(false);
+            void reload();
+          }}
+        />
+      )}
+      {selling && (
+        <SellSheet
+          item={item}
+          onClose={() => setSelling(false)}
+          onSold={(_, left) => {
+            setSelling(false);
+            void reload();
+            // Copies left: its prices again (the sale may count towards its value). Its last copies
+            // were sold: on to the sales history.
+            if (left) void load();
+            else navigate('/?view=selling');
+          }}
+        />
+      )}
       {editing && (
         <Sheet
           title={`Edit ${item.name}`}

@@ -78,6 +78,13 @@ export function useRoute(): Route {
  */
 export function useQueryParam(name: string, fallback = ''): [string, (value: string) => void] {
   const [value, setValue] = useState(() => current().query.get(name) ?? fallback);
+  // The page stays open when a link or the tab bar leads to it again (from Selling to the
+  // collection's cards, say): it follows the new address.
+  useEffect(() => {
+    const follow = () => setValue(current().query.get(name) ?? fallback);
+    window.addEventListener('hashchange', follow);
+    return () => window.removeEventListener('hashchange', follow);
+  }, [name, fallback]);
   const set = useCallback(
     (next: string) => {
       setValue(next);

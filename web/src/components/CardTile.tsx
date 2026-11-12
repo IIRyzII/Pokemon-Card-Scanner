@@ -40,6 +40,7 @@ export function ItemTile({ item, artist }: { item: CollectionItem; artist?: stri
           )}
         </div>
         {item.quantity > 1 && <span className="badge qty">×{item.quantity}</span>}
+        {item.forSale > 0 && <span className="badge for-sale-badge">For sale{item.forSale < item.quantity ? ` ×${item.forSale}` : ''}</span>}
       </div>
       <div className="tile-body">
         <div className="tile-name">{item.name}</div>

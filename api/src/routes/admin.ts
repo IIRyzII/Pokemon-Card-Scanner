@@ -2,7 +2,7 @@
 
 import { Hono } from 'hono';
 import { authenticate, requireRole } from '../auth.ts';
-import { ITEM_SELECT, toAudit, toItem, toSale, toUser } from '../db.ts';
+import { ITEM_SELECT, toAudit, toItem, toSale, toSold, toUser } from '../db.ts';
 import { toBinder } from './binders.ts';
 import { toSealed } from './sealed.ts';
 import { toWant } from './wants.ts';
@@ -24,7 +24,7 @@ admin.get('/audit', async (c) => {
 
 /** Everything except password hashes and sessions, as one JSON document. */
 admin.get('/export', async (c) => {
-  const [users, items, sales, maps, binders, wants, sealed] = await c.env.DB.batch([
+  const [users, items, sales, maps, binders, wants, sealed, sold] = await c.env.DB.batch([
     c.env.DB.prepare('SELECT * FROM users ORDER BY created_at'),
     c.env.DB.prepare(`${ITEM_SELECT} ORDER BY ci.created_at`),
     c.env.DB.prepare('SELECT * FROM sales ORDER BY sold_on'),
@@ -32,6 +32,7 @@ admin.get('/export', async (c) => {
     c.env.DB.prepare('SELECT * FROM binders ORDER BY created_at'),
     c.env.DB.prepare('SELECT * FROM wants ORDER BY created_at'),
     c.env.DB.prepare('SELECT * FROM sealed_items ORDER BY created_at'),
+    c.env.DB.prepare('SELECT * FROM sold_items ORDER BY sold_on, created_at'),
   ]);
   type Row = Record<string, unknown>;
   return c.json({
@@ -44,6 +45,7 @@ admin.get('/export', async (c) => {
     binders: (binders.results as Row[]).map(toBinder),
     wants: (wants.results as Row[]).map(toWant),
     sealed: (sealed.results as Row[]).map(toSealed),
+    sold: (sold.results as Row[]).map(toSold),
   });
 });
 

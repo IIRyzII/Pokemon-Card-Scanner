@@ -140,6 +140,81 @@ try {
     await api('PATCH', `/api/sealed/${extra.data.item.id}`, { token: A, body: { quantity: 3 }, expect: 404 });
   });
 
+  await check('selling: list copies, sell some, sell the rest, see the history, undo; viewers only look', async () => {
+    const added = await api('POST', '/api/collection', {
+      token: A,
+      body: { cardId: 'base1-2', variant: 'holo', quantity: 3, purchasePrice: 20, purchaseCurrency: 'GBP' },
+      expect: 201,
+    });
+    const id = added.data.item.id;
+    assert.equal(added.data.item.forSale, 0);
+    await api('PUT', `/api/collection/${id}/listing`, { token: A, body: { forSale: 4 }, expect: 400 });
+    await api('PUT', `/api/collection/${id}/listing`, { token: A, body: { forSale: 1, listingUrl: 'not a link' }, expect: 400 });
+    await api('PUT', `/api/collection/${id}/listing`, { token: B, body: { forSale: 1 }, expect: 403 });
+    const listed = await api('PUT', `/api/collection/${id}/listing`, {
+      token: A,
+      body: { forSale: 2, askingPrice: 60, askingCurrency: 'GBP', salePlatform: 'eBay', listingUrl: 'https://www.ebay.co.uk/itm/123' },
+      expect: 200,
+    });
+    assert.equal(listed.data.item.forSale, 2);
+    assert.equal(listed.data.item.askingPrice, 60);
+    assert.ok(listed.data.item.listedAt);
+
+    await api('POST', `/api/collection/${id}/sell`, { token: B, body: { quantity: 1, price: 55 }, expect: 403 });
+    const one = await api('POST', `/api/collection/${id}/sell`, {
+      token: A,
+      body: { quantity: 1, price: 55, currency: 'GBP', fees: 7.5, postage: 2.1, platform: 'eBay', soldOn: today },
+      expect: 201,
+    });
+    assert.equal(one.data.item.quantity, 2);
+    assert.equal(one.data.item.forSale, 1, 'the copy sold comes off sale');
+    assert.deepEqual(
+      [one.data.sold.purchasePrice, one.data.sold.fees, one.data.sold.postage, one.data.sold.emptied, one.data.sold.fromSale],
+      [20, 7.5, 2.1, false, 1],
+    );
+    const card = await api('GET', '/api/cards/base1-2', { token: A, expect: 200 });
+    assert.ok(
+      card.data.sales.some((s) => s.id === one.data.sold.saleId && s.price === 55 && s.source === 'eBay'),
+      'logged as a sale of the card, for its value',
+    );
+    await api('POST', `/api/collection/${id}/sell`, { token: A, body: { quantity: 3, price: 50 }, expect: 400 });
+    await api('POST', `/api/collection/${id}/sell`, { token: A, body: { quantity: 1, price: 50, soldOn: '2999-01-01' }, expect: 400 });
+
+    const rest = await api('POST', `/api/collection/${id}/sell`, { token: A, body: { quantity: 2, price: 52, currency: 'GBP', logSale: false }, expect: 201 });
+    assert.equal(rest.data.item, null, 'its last copies: the entry leaves the collection');
+    assert.equal(rest.data.sold.emptied, true);
+    assert.equal(rest.data.sold.saleId, null);
+    const active = await api('GET', '/api/collection', { token: A, expect: 200 });
+    assert.ok(!active.data.items.some((i) => i.id === id));
+    const trash = await api('GET', '/api/collection?deleted=1', { token: A, expect: 200 });
+    assert.ok(!trash.data.items.some((i) => i.id === id), 'sold, not in the trash');
+    const history = await api('GET', '/api/sold', { token: B, expect: 200 });
+    assert.deepEqual(
+      history.data.sold.map((s) => [s.name, s.quantity, s.price]),
+      [
+        ['Blastoise', 2, 52],
+        ['Blastoise', 1, 55],
+      ],
+    );
+
+    await api('DELETE', `/api/sold/${rest.data.sold.id}`, { token: B, expect: 403 });
+    const back = await api('DELETE', `/api/sold/${rest.data.sold.id}`, { token: A, expect: 200 });
+    assert.equal(back.data.restored, true);
+    assert.deepEqual([back.data.item.quantity, back.data.item.deletedAt], [2, null]);
+    assert.equal(back.data.item.forSale, 1, 'the copy that was for sale is on sale again');
+    const back2 = await api('DELETE', `/api/sold/${one.data.sold.id}`, { token: A, expect: 200 });
+    assert.deepEqual([back2.data.item.quantity, back2.data.item.forSale], [3, 2], 'back as it was before selling');
+    const after = await api('GET', '/api/cards/base1-2', { token: A, expect: 200 });
+    assert.ok(!after.data.sales.some((s) => s.id === one.data.sold.saleId), 'its logged sale goes too');
+    assert.equal((await api('GET', '/api/sold', { token: A, expect: 200 })).data.sold.length, 0);
+
+    const off = await api('DELETE', `/api/collection/${id}/listing`, { token: A, expect: 200 });
+    assert.deepEqual([off.data.item.forSale, off.data.item.askingPrice, off.data.item.listingUrl], [0, null, null]);
+    // Out again, so the checks after this one see the collection they expect.
+    await api('DELETE', `/api/collection/${id}`, { token: A, expect: 200 });
+    await api('DELETE', `/api/collection/${id}/purge`, { token: A, expect: 200 });
+  });
+
   await check('editor adds a PSA 9 Base Set Charizard (card data from our API)', async () => {
     await api('PATCH', `/api/users/${bobId}`, { token: A, body: { role: 'editor' }, expect: 200 });
     const { data } = await api('POST', '/api/collection', {
@@ -378,13 +453,16 @@ try {
   await check('admin audit log and export', async () => {
     const { data } = await api('GET', '/api/admin/audit', { token: A, expect: 200 });
     const actions = data.entries.map((e) => e.action);
-    for (const a of ['register', 'add', 'merge', 'log-sale', 'remove', 'restore', 'purge', 'update']) assert.ok(actions.includes(a), a);
+    for (const a of ['register', 'add', 'merge', 'log-sale', 'remove', 'restore', 'purge', 'update', 'list', 'sell', 'unsell', 'unlist']) {
+      assert.ok(actions.includes(a), a);
+    }
     const exp = await api('GET', '/api/admin/export', { token: A, expect: 200 });
     assert.equal(exp.data.collection.length, 1);
     assert.deepEqual(
       exp.data.sealed.map((s) => s.name),
       ['Base Set Booster Box'],
     );
+    assert.deepEqual(exp.data.sold, [], 'sales undone leave no trace in the history');
     assert.deepEqual(
       exp.data.binders.map((b) => b.name),
       ['Shuckle binder'],

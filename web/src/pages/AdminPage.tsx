@@ -3,51 +3,11 @@ import { MIN_PASSWORD_LENGTH } from '../../../shared/password.ts';
 import { ROLES, ROLE_INFO, type AuditEntry, type Role, type User } from '../../../shared/types.ts';
 import { useFeedback } from '../components/feedback.tsx';
 import { api, getApiUrl } from '../lib/api.ts';
+import { describeAudit } from '../lib/audit.ts';
 import { useCollection } from '../lib/collection.tsx';
 import { downloadFile, relativeTime, todayIso } from '../lib/format.ts';
 import { derivePasswordKey } from '../lib/password.ts';
 import { useSession } from '../lib/session.tsx';
-
-function describe(e: AuditEntry): string {
-  let d: Record<string, unknown> = {};
-  try {
-    d = e.details ? (JSON.parse(e.details) as Record<string, unknown>) : {};
-  } catch {
-    // plain text details
-  }
-  const card = typeof d.card === 'string' ? d.card : null;
-  switch (e.action) {
-    case 'add':
-      return `added ${card ?? 'a card'}`;
-    case 'edit':
-      return `edited ${card ?? 'a card'} (${Object.keys(d).filter((k) => k !== 'card').join(', ') || 'no changes'})`;
-    case 'remove':
-      return `removed ${card ?? 'a card'}`;
-    case 'restore':
-      return `restored ${card ?? 'a card'}`;
-    case 'purge':
-      return `permanently deleted ${card ?? 'a card'}`;
-    case 'log-sale':
-      return `logged a ${d.grader === 'RAW' ? 'raw' : `${d.grader} ${d.grade}`} sale of $${d.price} for ${e.entityId}`;
-    case 'delete-sale':
-      return `deleted a sale for ${e.entityId}`;
-    case 'register':
-      return `signed up (${d.role})`;
-    case 'update':
-      return `updated ${d.email ?? 'a user'}: ${Object.entries(d)
-        .filter(([k]) => k !== 'email')
-        .map(([k, v]) => `${k} ${v}`)
-        .join(', ')}`;
-    case 'reset-password':
-      return `reset the password of ${d.email}`;
-    case 'create-user':
-      return `created an account for ${d.email} (${d.role})`;
-    case 'delete':
-      return `deleted user ${d.email}`;
-    default:
-      return `${e.action} ${e.entity} ${e.entityId ?? ''}`;
-  }
-}
 
 function csvCell(v: unknown): string {
   const s = v === null || v === undefined ? '' : String(v);
@@ -276,7 +236,7 @@ export function AdminPage() {
         <ul className="audit">
           {audit.map((e) => (
             <li key={e.id}>
-              <span className="faint small">{relativeTime(e.createdAt)}</span> <b>{e.userEmail ?? 'system'}</b> {describe(e)}
+              <span className="faint small">{relativeTime(e.createdAt)}</span> <b>{e.userEmail ?? 'system'}</b> {describeAudit(e)}
             </li>
           ))}
         </ul>

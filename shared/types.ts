@@ -111,6 +111,78 @@ export interface CollectionItem extends ItemFields {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  /** Copies of it for sale (0: not for sale) */
+  forSale: number;
+  /** The asking price for one, where it's listed, and since when */
+  askingPrice: number | null;
+  askingCurrency: string | null;
+  salePlatform: string | null;
+  listingUrl: string | null;
+  listedAt: string | null;
+}
+
+/** Putting copies of an entry up for sale, or changing how they're listed. */
+export interface ListingInput {
+  forSale: number;
+  askingPrice: number | null;
+  askingCurrency: string | null;
+  salePlatform: string | null;
+  listingUrl: string | null;
+}
+
+/** Selling copies of an entry. */
+export interface SaleInput {
+  quantity: number;
+  /** What one sold for */
+  price: number;
+  currency: string;
+  /** The selling fees and the postage paid, for the whole sale */
+  fees: number | null;
+  postage: number | null;
+  platform: string | null;
+  soldOn: string;
+  note: string | null;
+  /** Also log it as a sale of the card, so it counts towards the card's value */
+  logSale: boolean;
+}
+
+/** A sale of copies from the collection, with the card and the copy's details as they were. */
+export interface SoldItem {
+  id: string;
+  /** The entry the copies came from (null: unknown) */
+  itemId: string | null;
+  cardId: string;
+  name: string;
+  setName: string | null;
+  number: string | null;
+  setTotal: number | null;
+  image: string | null;
+  variant: string;
+  language: string | null;
+  grader: string;
+  grade: number | null;
+  gradeLabel: string | null;
+  condition: string | null;
+  quantity: number;
+  /** How many of them were for sale */
+  fromSale: number;
+  /** What one sold for */
+  price: number;
+  currency: string;
+  /** For the whole sale, in its currency */
+  fees: number | null;
+  postage: number | null;
+  /** What one cost when bought */
+  purchasePrice: number | null;
+  purchaseCurrency: string | null;
+  platform: string | null;
+  soldOn: string;
+  note: string | null;
+  /** The sale logged for the card's value, if one was */
+  saleId: string | null;
+  /** These were the entry's last copies */
+  emptied: boolean;
+  createdAt: string;
 }
 
 export interface CollectionResponse {

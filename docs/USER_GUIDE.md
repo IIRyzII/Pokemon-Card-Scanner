@@ -8,6 +8,7 @@ How to use the app: scanning, the collection, binders, the want list, prices and
 - [Grade check](#grade-check)
 - [The collection](#the-collection)
 - [Sealed products](#sealed-products)
+- [Selling](#selling)
 - [Binders](#binders)
 - [Want list](#want-list)
 - [Prices and currency](#prices-and-currency)
@@ -67,6 +68,24 @@ Booster boxes, Elite Trainer Boxes, booster packs, tins, box sets, theme decks, 
 - **Values** are Cardmarket's trend prices, converted to your currency. The total at the top compares what you paid with what those products are worth now. A product with no Cardmarket price yet shows a dash.
 - **Change or remove one:** tap it. Links to Cardmarket and to eBay sold listings help you check a price.
 - Sealed products need the API's latest version (with its new database table). Until it's updated, the Sealed view says so.
+
+## Selling
+
+Keep track of the cards you sell, and what you made on them.
+
+- **Put a card up for sale:** open it in your collection and tap **For sale**.
+  - Choose how many copies, the asking price for one, where you're selling it, and the listing link.
+  - A ready-made listing title (within eBay's 80 characters) and description are there to copy into your listing.
+  - Cards for sale have a **For sale** badge in the collection.
+- **Record a sale:** tap **Sold**, on the card or in the Selling view.
+  - Enter what one sold for, the fees and the postage you paid. It shows the profit against what you paid for the card.
+  - The copies leave the collection, and the entry with them if they were its last.
+  - The sale is also logged as a sale of that card, which helps value your other copies. Untick it to leave it out.
+- **The Selling view:** open the **Collection** tab and switch to **Selling**.
+  - **For sale:** everything up for sale, with asking prices and values.
+  - **Sold:** your sales by month, with takings, costs and profit. **Undo** puts a sale's copies back in the collection, and back up for sale if they were.
+  - **What to sell:** your spare copies (keeping your best copy of each card), then the cards that have gained most since you bought them.
+- Selling needs the API's latest version, with its new database table. Until the API is updated, the Selling view says so.
 
 ## Binders
 

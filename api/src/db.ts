@@ -1,6 +1,6 @@
 // Row → API object mappers and small shared queries.
 
-import type { AuditEntry, CollectionItem, HistoryPoint, PriceRow, SaleRow, User } from '../../shared/types.ts';
+import type { AuditEntry, CollectionItem, HistoryPoint, PriceRow, SaleRow, SoldItem, User } from '../../shared/types.ts';
 import { nowIso, type Env, type SessionUser } from './env.ts';
 
 type Row = Record<string, unknown>;
@@ -55,6 +55,45 @@ export function toItem(r: Row): CollectionItem {
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
     deletedAt: s(r.deleted_at),
+    forSale: Number(r.for_sale ?? 0),
+    askingPrice: n(r.asking_price),
+    askingCurrency: s(r.asking_currency),
+    salePlatform: s(r.sale_platform),
+    listingUrl: s(r.listing_url),
+    listedAt: s(r.listed_at),
+  };
+}
+
+export function toSold(r: Row): SoldItem {
+  return {
+    id: String(r.id),
+    itemId: s(r.item_id),
+    cardId: String(r.card_id),
+    name: String(r.name),
+    setName: s(r.set_name),
+    number: s(r.number),
+    setTotal: n(r.set_total),
+    image: s(r.image),
+    variant: String(r.variant),
+    language: s(r.language),
+    grader: String(r.grader),
+    grade: n(r.grade),
+    gradeLabel: s(r.grade_label),
+    condition: s(r.condition),
+    quantity: Number(r.quantity),
+    fromSale: Number(r.from_sale ?? 0),
+    price: Number(r.price),
+    currency: String(r.currency),
+    fees: n(r.fees),
+    postage: n(r.postage),
+    purchasePrice: n(r.purchase_price),
+    purchaseCurrency: s(r.purchase_currency),
+    platform: s(r.platform),
+    soldOn: String(r.sold_on),
+    note: s(r.note),
+    saleId: s(r.sale_id),
+    emptied: !!r.emptied,
+    createdAt: String(r.created_at),
   };
 }
 

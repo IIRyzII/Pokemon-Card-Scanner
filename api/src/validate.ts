@@ -76,6 +76,12 @@ export function isoDate(v: unknown, field: string, opts: Opts = {}): string | nu
   return s;
 }
 
+/**
+ * The latest date that's today somewhere: the app sends the user's local date, which can already be
+ * tomorrow in UTC (in the UK just after midnight in summer, in Australia for half the day).
+ */
+export const latestToday = () => new Date(Date.now() + 14 * 3_600_000).toISOString().slice(0, 10);
+
 export function httpUrl(v: unknown, field: string): string | null {
   const s = text(v, field, { optional: true, max: 2000 });
   if (s === null) return null;
